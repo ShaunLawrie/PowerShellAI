@@ -1,3 +1,8 @@
+# Script Validation Example
+WIP  
+
+https://user-images.githubusercontent.com/13159458/224726992-43fd5378-e042-4226-8369-a608c0f082ec.mp4
+
 # PowerShellAI
 ## A User-Friendly Module for OpenAI's GPT-3 and DALL-E API
 
