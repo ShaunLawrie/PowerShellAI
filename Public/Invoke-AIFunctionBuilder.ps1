@@ -13,8 +13,7 @@ function Invoke-AIFunctionBuilder {
     [alias("ifb")]
     param(
         [string] $Prompt,
-        [int] $MaximumReinforcementIterations = 10,
-        [int] $MaxTokens = 2048
+        [int] $MaximumReinforcementIterations = 15
     )
 
     $ErrorActionPreference = "SilentlyContinue"
@@ -24,30 +23,30 @@ function Invoke-AIFunctionBuilder {
         Write-Host -ForegroundColor Green -NoNewline "`n${prePrompt}: "
         $Prompt = Read-Host
     }
-    $postPrompt = $prePrompt + " " + $Prompt
-
-    $topLeftPosition = $Host.UI.RawUI.CursorPosition
-    $topLeftPosition.Y++
-
-    Write-Verbose "Sending initial prompt for completion: '$postPrompt'"
-    $currentFunctionText = Get-GPT3Completion $postPrompt -Verbose:$false | Format-FunctionBuilder
 
     $iteration = 1
-    while ($true) {
 
+    Write-Verbose "Sending initial prompt for completion: '$Prompt'"
+    $currentFunction = Initialize-Function -Prompt $Prompt
+
+    Initialize-Renderer
+    Write-FunctionOutput -Stage "$iteration stage 1 (syntax validation)" -FunctionText $currentFunction.Body
+
+    while ($true) {
         if($iteration -gt $MaximumReinforcementIterations) {
             Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit"
             return
         }
         
-        Write-FunctionOutput -CursorPositionX $topLeftPosition.X -CursorPositionY $topLeftPosition.Y -Stage "$iteration (syntax validation)" -FunctionText $currentFunctionText
-        $correctionPrompt = Test-FunctionBuilderSyntax -FunctionText $currentFunctionText
+        $correctionPrompt = Test-FunctionSyntax -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
         
-        if($correctionPrompt) {
-            $currentFunctionText = (Get-OpenAIEdit -InputText $currentFunctionText -Instruction $correctionPrompt).text | Format-FunctionBuilder
+        if($correctionPrompt) { 
+            Add-LogMessage "Waiting for code-davinci-001 to correct syntax issues."
+            $currentFunction = (Get-OpenAIEdit -InputText $currentFunction.Body -Instruction $correctionPrompt).text | ConvertTo-Function
+            Write-FunctionOutput -Stage "$iteration stage 2 (semantic validation)" -FunctionText $currentFunction.Body
 
-            Write-FunctionOutput -CursorPositionX $topLeftPosition.X -CursorPositionY $topLeftPosition.Y -Stage "$iteration (semantic validation)" -FunctionText $currentFunctionText
-            $currentFunctionText = Repair-FunctionBuilderSemantics -FunctionText $currentFunctionText -Prompt $Prompt | Format-FunctionBuilder
+            $currentFunction = Test-FunctionSemantics -FunctionText $currentFunction.Body -Prompt $Prompt
+            Write-FunctionOutput -Stage "$iteration stage 1 (syntax validation)" -FunctionText $currentFunction.Body
         } else {
             break
         }
@@ -55,19 +54,18 @@ function Invoke-AIFunctionBuilder {
         $iteration++
     }
 
-    Write-FunctionOutput -CursorPositionX $topLeftPosition.X -CursorPositionY $topLeftPosition.Y -Stage "$iteration (passed all validation)" -FunctionText $currentFunctionText -SyntaxHighlight
+    Write-FunctionOutput -Stage "$iteration stage 3 (syntax highlighting)" -FunctionText $currentFunction.Body -SyntaxHighlight
 
-    $action = Get-FunctionBuilderAction -Filename $suggestedFilename
-    $functionName = Get-FunctionBuilderName -FunctionText $currentFunctionText
+    $action = Get-UserAction -Filename $suggestedFilename
 
     switch($action) {
         "Run" {
-            $scriptLocation = Save-FunctionBuilderOutput -FunctionText $currentFunctionText -FunctionName $functionName
+            $scriptLocation = Save-FunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
             Write-Host "Running '. $scriptLocation'`n`nYou can now use this function"
-            . $scriptLocation
+            Import-Module $scriptLocation
         }
         "Save" {
-            Save-FunctionBuilderOutput -FunctionText $currentFunctionText -FunctionName $functionName
+            Save-FunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
         }
     }
 }
