@@ -33,11 +33,12 @@ $script:FunctionExtractionPatterns = @(
     }
 )
 
-function Get-UserAction {
+function Get-AifbUserAction {
     <#
         .SYNOPSIS
-            A prompt for AIFunctionBuilder to allow the user to choose what to do with the final script
+            A prompt for AIFunctionBuilder to allow the user to choose what to do with the final function output
     #>
+
     $actions = @(
         New-Object System.Management.Automation.Host.ChoiceDescription '&Save', 'Save this function to your local filesystem'
         New-Object System.Management.Automation.Host.ChoiceDescription '&Run', 'Save this function to your local filesystem and load it into this PowerShell session'
@@ -49,14 +50,16 @@ function Get-UserAction {
     return $actions[$response].Label -replace '&', ''
 }
 
-function Save-FunctionOutput {
+function Save-AifbFunctionOutput {
     <#
         .SYNOPSIS
             Prompt the user for a destination to save their script output an save the output to disk
     #>
     param (
-        [string] $FunctionText,
-        [string] $FunctionName
+        # The name of the function to be tested
+        [string] $FunctionName,
+        # A function in a text format to be formatted
+        [string] $FunctionText
     )
 
     $suggestedFilename = "$FunctionName.psm1"
@@ -89,14 +92,45 @@ function Save-FunctionOutput {
     }
 }
 
-function ConvertTo-Function {
+function Remove-AifbComments {
+    <#
+        .SYNOPSIS
+            Removes comments from a string of PowerShell code.
+
+        .EXAMPLE
+            PS C:\> Remove-AifbComments "function foo { # comment 1 `n # comment 2 `n return 'bar' }"
+            function foo {  `n  `n return 'bar' }
+    #>
+    param (
+        # A function in a text format to have comments stripped
+        [Parameter(ValueFromPipeline = $true)]
+        [string] $FunctionText
+    )
+
+    process {
+        $tokens = @()
+
+        [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$tokens, [ref]$null) | Out-Null
+
+        $comments = $tokens | Where-Object { $_.Kind -eq "Comment" }
+
+        # Strip comments from bottom to top to preserve extent offsets
+        $comments | Sort-Object { $_.Extent.StartOffset } -Descending | ForEach-Object {
+            $preComment = $FunctionText.Substring(0, $_.Extent.StartOffset)
+            $postComment = $FunctionText.Substring($_.Extent.EndOffset, $FunctionText.Length - $_.Extent.EndOffset)
+            $FunctionText = $preComment + $postComment
+        }
+
+        return $FunctionText
+    }
+}
+
+function ConvertTo-AifbFunction {
     <#
         .SYNOPSIS
             Converts a string containing a function into a hashtable with the function name and body
-        .PARAMETER Text
-            The text containing the function
         .EXAMPLE
-            ConvertTo-Function "This funtion writes 'bar' to the terminal function Get-Foo { Write-Host 'bar' }"
+            ConvertTo-AifbFunction "This funtion writes 'bar' to the terminal function Get-Foo { Write-Host 'bar' }"
             Would return:
             @{
                 Name = "Get-Foo"
@@ -104,6 +138,7 @@ function ConvertTo-Function {
             }
     #>
     param (
+        # Some text that contains a function name and body to extract
         [Parameter(ValueFromPipeline = $true)]
         [string] $Text
     )
@@ -112,7 +147,7 @@ function ConvertTo-Function {
             if($Text -match $pattern.Regex) {
                 return @{
                     Name = $Matches[$pattern.FunctionNameGroup]
-                    Body = ($Matches[$pattern.FunctionBodyGroup] | Format-Function)
+                    Body = ($Matches[$pattern.FunctionBodyGroup] | Format-AifbFunction)
                 }
             }
         }
@@ -121,12 +156,13 @@ function ConvertTo-Function {
     }
 }
 
-function Format-Function {
+function Format-AifbFunction {
     <#
         .SYNOPSIS
             Strip all comments from a PowerShell code block and use PSScriptAnalyzer to format the script if it's available
     #>
     param (
+        # A function in a text format to be formatted
         [Parameter(ValueFromPipeline = $true)]
         [string] $FunctionText
     )
@@ -135,12 +171,12 @@ function Format-Function {
         Write-Verbose "Input function input:`n$FunctionText"
 
         # Remove all comments because the comments can skew the LLMs interpretation of the code
-        $FunctionText = $FunctionText | Remove-Comments
+        $FunctionText = $FunctionText | Remove-AifbComments
         
         # Remove empty lines to save space in the rendering window
         $FunctionText = ($FunctionText.Split("`n") | Where-Object { ![string]::IsNullOrWhiteSpace($_) }) -join "`n"
         
-        if(Test-ScriptAnalyzerAvailable) {
+        if(Test-AifbScriptAnalyzerAvailable) {
             $FunctionText = $FunctionText | Invoke-Formatter -Verbose:$false
         }
 
@@ -150,43 +186,43 @@ function Format-Function {
     }
 }
 
-function Test-FunctionSyntax {
+function Test-AifbFunctionSyntax {
     <#
         .SYNOPSIS
             This function tests a PowerShell script for quality and commandlet usage issues.
 
         .DESCRIPTION
-            The Test-FunctionSyntax function checks a PowerShell script for quality and commandlet usage issues by calling the
-            validating the script parses correctly and all commandlets exist and have the correct parameters used.
-            If any issues are found, the function returns a ChatGPT prompt that requests the LLM to perform corrections for the issues.
-
-        .PARAMETER FunctionName
-            Specifies the name of the PowerShell function to be tested.
-
-        .PARAMETER FunctionText
-            Specifies the text of the PowerShell script to be tested.
+            The Test-AifbFunctionSyntax function checks a PowerShell script for quality and commandlet usage issues by
+            checking that the script:
+             - Uses valid syntax
+             - All commandlets are used and the correct parameters are used.
+            For the first line with issues, the function returns a ChatGPT prompt that requests the LLM to perform corrections for the issues.
+            Only the first line is returned because asking ChatGPT or other LLM models to do multiple things at once tends to result in pretty mangled code.
 
         .EXAMPLE
             $FunctionText = @"
             function Get-RunningServices { Get-Service | Where-Object {$_.Status -eq "Running"} | Sort-Object -Property Name }
             "@
             $originalPrompt = "Some Prompt"
-            Test-FunctionSyntax -FunctionName "Get-RunningServices" -FunctionText $FunctionText
+            Test-AifbFunctionSyntax -FunctionName "Get-RunningServices" -FunctionText $FunctionText
 
             This example tests the specified PowerShell script for quality and commandlet usage issues. If any issues are found, the function returns a prompt for corrections.
     #>
     param (
+        # The name of the function to be tested
         [string] $FunctionName,
+        # A function in a text format to be formatted
         [string] $FunctionText
     )
 
     $issuesToCorrect = @()
 
     # Check syntax errors
-    $issuesToCorrect += Test-FunctionParsing -FunctionName $FunctionName -FunctionText $FunctionText
+    $issuesToCorrect += Test-AifbFunctionParsing -FunctionName $FunctionName -FunctionText $FunctionText
+
     # Only check commandlet usage if there are no syntax errors
     if($issuesToCorrect.Count -eq 0) {
-        $issuesToCorrect += Test-FunctionCommandletUsage -FunctionText $FunctionText
+        $issuesToCorrect += Test-AifbFunctionCommandletUsage -FunctionText $FunctionText
     }
 
     # Deduplicate issues
@@ -199,37 +235,68 @@ function Test-FunctionSyntax {
     }
 }
 
-function Test-FunctionSemantics {
+function Get-AifbSemanticFailureReason {
+    <#
+        .SYNOPSIS
+            This function takes a chat GPT response that contains code and a reason for failing function semantic validation and returns just the reason.
+    #>
     param (
+        # The text response from ChatGPT format.
+        [string] $Text
+    )
+
+    $result = $Text.Trim() -replace '(?i)NO\.?\s+', ''
+    $result = $result -replace '(?s).\s+(Here is|Here''s).+', ''
+
+    return $result
+}
+
+function Test-AifbFunctionSemantics {
+    <#
+        .SYNOPSIS
+            This function takes a the text of a function and the original prompt used to generate it and checks that the code will achieve the goals of the original prompt.
+    #>
+    param (
+        # The original prompt used to generate the code provided as FunctionText
         [string] $Prompt,
+        # The function as text generated by the prompt
         [string] $FunctionText
     )
+
     New-Chat $script:SystemPrompts.SemanticReinforcement -Verbose:$false
-    Add-LogMessage "Waiting for gpt-3.5-turbo to validate semantics."
+    
+    Add-AifbLogMessage "Waiting for gpt-3.5-turbo to validate semantics."
     $response = Write-ChatResponse -Role "user" -Content ($script:UserPrompts.SemanticReinforcement -f $Prompt, $FunctionText) -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
-    if($response.Trim() -match "(?i)^YES") {
-        Add-LogMessage "The function meets the original intent of the prompt."
-        return $FunctionText | ConvertTo-Function
+    $response = $response.Trim()
+
+    if($response -match "(?i)^YES") {
+        Add-AifbLogMessage "The function meets the original intent of the prompt."
+        return $FunctionText | ConvertTo-AifbFunction
     } else {
-        if($response -match '(?s)^(.+)(\s+Here.+?a corrected|\s+function\s+([a-z0-9\-]+)\s+\{)') {
-            Add-LogMessage -Level "ERROR" -Message (($Matches[1].Trim() -replace '(?i)NO\.?\s+', '') -replace '(?s).\s+(Here is|Here''s).+', '')
-        } else {
-            Add-LogMessage -Level "ERROR" -Message "The function doesn't meet the original intent of the prompt."
+        try {
+            Add-AifbLogMessage -Level "ERROR" -Message ($Matches[1] | Get-AifbSemanticFailureReason)
+        } catch {
+            Add-AifbLogMessage -Level "ERROR" -Message "The function doesn't meet the original intent of the prompt."
         }
         try {
-            return $response | ConvertTo-Function
+            return $response | ConvertTo-AifbFunction
         } catch {
-            Add-LogMessage -Level "WARN" -Message "Following up with ChatGPT because it didn't return any code."
+            Add-AifbLogMessage -Level "WARN" -Message "Following up with ChatGPT because it didn't return any code."
             $response = Write-ChatResponse -Role "user" -Content $script:UserPrompts.SemanticFollowUp -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
-            return $response | ConvertTo-Function
+            return $response | ConvertTo-AifbFunction
         }
     }
 }
 
-function Initialize-Function {
+function Initialize-AifbFunction {
+    <#
+        .SYNOPSIS
+            This function creates the first version of the code that will be used to start the function builder loop.
+    #>
     param (
+        # The prompt format is "Write a PowerShell function that will {PROMPT}" where prompt is just the end half
         [string] $Prompt
     )
     New-Chat $script:SystemPrompts.ScriptWriter -Verbose:$false
-    return Write-ChatResponse -Role "user" -Content $Prompt -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive | ConvertTo-Function
+    return Write-ChatResponse -Role "user" -Content $Prompt -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive | ConvertTo-AifbFunction
 }

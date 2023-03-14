@@ -12,25 +12,29 @@ function Invoke-AIFunctionBuilder {
     [CmdletBinding()]
     [alias("ifb")]
     param(
+        # A prompt in the format "Write a powershell function that will sing me happy birthday"
         [string] $Prompt,
+        # The maximum loop iterations to attempt to generate the function within
         [int] $MaximumReinforcementIterations = 15
     )
 
     $ErrorActionPreference = "SilentlyContinue"
 
+    $prePrompt = $null
     if([string]::IsNullOrEmpty($Prompt)) {
         $prePrompt = "Write a PowerShell function that will"
         Write-Host -ForegroundColor Green -NoNewline "`n${prePrompt}: "
         $Prompt = Read-Host
     }
+    $postPrompt = @($prePrompt, $Prompt) -join " "
 
     $iteration = 1
 
-    Write-Verbose "Sending initial prompt for completion: '$Prompt'"
-    $currentFunction = Initialize-Function -Prompt $Prompt
+    Write-Verbose "Sending initial prompt for completion: '$postPrompt'"
+    $currentFunction = Initialize-Function -Prompt $postPrompt
 
-    Initialize-Renderer
-    Write-FunctionOutput -Stage "$iteration stage 1 (syntax validation)" -FunctionText $currentFunction.Body
+    Initialize-AifbRenderer
+    Write-AifbFunctionOutput -FunctionText $currentFunction.Body
 
     while ($true) {
         if($iteration -gt $MaximumReinforcementIterations) {
@@ -38,15 +42,15 @@ function Invoke-AIFunctionBuilder {
             return
         }
         
-        $correctionPrompt = Test-FunctionSyntax -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
+        $correctionPrompt = Test-AifbFunctionSyntax -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
         
         if($correctionPrompt) { 
-            Add-LogMessage "Waiting for code-davinci-001 to correct syntax issues."
-            $currentFunction = (Get-OpenAIEdit -InputText $currentFunction.Body -Instruction $correctionPrompt).text | ConvertTo-Function
-            Write-FunctionOutput -Stage "$iteration stage 2 (semantic validation)" -FunctionText $currentFunction.Body
+            Add-AifbLogMessage "Waiting for code-davinci-001 to correct syntax issues."
+            $currentFunction = (Get-OpenAIEdit -InputText $currentFunction.Body -Instruction $correctionPrompt).text | ConvertTo-AifbFunction
+            Write-AifbFunctionOutput -FunctionText $currentFunction.Body
 
-            $currentFunction = Test-FunctionSemantics -FunctionText $currentFunction.Body -Prompt $Prompt
-            Write-FunctionOutput -Stage "$iteration stage 1 (syntax validation)" -FunctionText $currentFunction.Body
+            $currentFunction = Test-AifbFunctionSemantics -FunctionText $currentFunction.Body -Prompt $Prompt
+            Write-AifbFunctionOutput -FunctionText $currentFunction.Body
         } else {
             break
         }
@@ -54,18 +58,18 @@ function Invoke-AIFunctionBuilder {
         $iteration++
     }
 
-    Write-FunctionOutput -Stage "$iteration stage 3 (syntax highlighting)" -FunctionText $currentFunction.Body -SyntaxHighlight
+    Write-AifbFunctionOutput -FunctionText $currentFunction.Body -SyntaxHighlight
 
-    $action = Get-UserAction -Filename $suggestedFilename
+    $action = Get-AifbUserAction -Filename $suggestedFilename
 
     switch($action) {
         "Run" {
-            $scriptLocation = Save-FunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
-            Write-Host "Running '. $scriptLocation'`n`nYou can now use this function"
+            $scriptLocation = Save-AifbFunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
+            Write-Host "Importing module file $scriptLocation'`n`nYou can now use this function"
             Import-Module $scriptLocation
         }
         "Save" {
-            Save-FunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
+            Save-AifbFunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
         }
     }
 }

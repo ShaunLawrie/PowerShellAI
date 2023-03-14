@@ -6,44 +6,61 @@ $script:LogMessageColors = @{
     "WARN" = "Yellow"
     "ERROR" = "Red"
 }
-$script:LogMessagesMaxCount = 10
+$script:LogMessagesMaxCount = 8
 $script:FunctionTopLeft = @{X = 0; Y = 0}
 $script:LogMessagesTopLeft = @{X = 0; Y = 0}
 
-function Initialize-Renderer {
+function Initialize-AifbRenderer {
+    <#
+        .SYNOPSIS
+            Setup the function renderer at the current cursor position, this will be considered the top left of the function for each draw
+    #>
     $currentPosition = $Host.UI.RawUI.CursorPosition
     $script:FunctionTopLeft.X = $currentPosition.X
     $script:FunctionTopLeft.Y = $currentPosition.Y + 1
     $script:LogMessages = [System.Collections.Queue]::new()
-    Add-LogMessage "Initialized function renderer at position [$($script:FunctionTopLeft.X), $($script:FunctionTopLeft.Y)]" -NoRender
+    Add-AifbLogMessage "Initialized function renderer at position [$($script:FunctionTopLeft.X), $($script:FunctionTopLeft.Y)]" -NoRender
 }
 
-function Write-FunctionParsingOutput {
+function Write-AifbFunctionParsingOutput {
     <#
         .SYNOPSIS
             Writes parsing output to the output stream and also to the renderer log output as errors.
     #>
     param (
+        # The message to log and format
         [string] $Message
     )
-    Add-LogMessage -Level "WARN" -Message $Message
+    Add-AifbLogMessage -Level "WARN" -Message $Message
     Write-Output " - $Message"
 }
 
-function Write-FunctionOutput {
+function Write-AifbFunctionOutput {
+    <#
+        .SYNOPSIS
+            This function writes a function to the terminal with optional syntax highlighting
+
+        .DESCRIPTION
+            Using some cursor manipulation and Write-Host this re-renders overtop of itself and clears the rest of the text on the terminal.
+            Then the function text is drawn and the log data is written underneath it.
+    #>
+    [CmdletBinding()]
     param (
-        [string] $Stage,
+        # The text of the function to render
         [string] $FunctionText,
+        # Whether to syntax highlight the function
         [switch] $SyntaxHighlight
     )
 
-    if($global:VerbosePreference -eq "Continue") {
+    # Write it all to the terminal and don't overwrite on every render, this makes debugging easier
+    if($VerbosePreference -ne "SilentlyContinue") {
         Write-Verbose $Stage
         Write-Verbose $FunctionText
-        Write-LogMessages
+        Write-AifbLogMessages
         return
     }
 
+    # Initialise cursor position at the top left of the function
     [Console]::SetCursorPosition($script:FunctionTopLeft.X, $script:FunctionTopLeft.Y)
     
     $OutputLines = @()
@@ -56,32 +73,34 @@ function Write-FunctionOutput {
             }
         }
     } else {
-        Write-Host -ForegroundColor DarkGray "$([Char]27)[48;2;25;25;25mNo function was provided`n"
+        Write-Error "No function was provided to the renderer"
     }
 
+    # Clear text formatting
     Write-Host -NoNewline "$([Char]27)[0m"
-    # Clear the rest of the window
-    $endOfFunctionPosition = $Host.UI.RawUI.CursorPosition
 
+    # Add a space between the function and the log
+    $endOfFunctionPosition = $Host.UI.RawUI.CursorPosition
     Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
 
+    # Write the function with some basic colors
     if($SyntaxHighlight) {
         $tokens = @()
         [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$tokens, [ref]$null) | Out-Null
 
         foreach($token in $tokens) {
             $TokenColor = switch -wildcard ($token.Kind) {
-                "Function" { "DarkRed" }
-                "Generic" { "Magenta" }
-                "String*" { "Cyan" }
-                "Variable" { "Cyan" }
-                "Identifier" { "Yellow" }
-                default { "White" }
+                "Function" { "$([Char]27)[48;2;255;123;114m)" }
+                "Generic" { "$([Char]27)[48;2;199;159;242m)" }
+                "String*" { "$([Char]27)[48;2;143;185;221m)" }
+                "Variable" { "$([Char]27)[48;2;255;255;255m)" }
+                "Identifier" { "$([Char]27)[48;2;110;174;231m)" }
+                default { "$([Char]27)[48;2;220;220;220m)" }
             }
             if($token.TokenFlags -like "*operator*" -or $token.TokenFlags -like "*keyword*") {
-                $TokenColor = "Red"
+                $TokenColor = "$([Char]27)[48;2;255;123;114m)"
             }
-            Write-Overlay -Line $token.Extent.StartLineNumber -Column $token.Extent.StartColumnNumber -Text $token.Text -ForegroundColor $TokenColor
+            Write-AifbOverlay -Line $token.Extent.StartLineNumber -Column $token.Extent.StartColumnNumber -Text ($TokenColor + $token.Text)
         }
     }
 
@@ -92,10 +111,10 @@ function Write-FunctionOutput {
     
     [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y + 1)
     $script:LogMessagesTopLeft = $Host.UI.RawUI.CursorPosition
-    Write-LogMessages
+    Write-AifbLogMessages
 }
 
-function Write-Overlay {
+function Write-AifbOverlay {
     <#
         .SYNOPSIS
             Writes text to the console at a specific line and column.
@@ -149,7 +168,7 @@ function Write-Overlay {
     }
 }
 
-function Add-LogMessage {
+function Add-AifbLogMessage {
     param (
         [string] $Message,
         [ValidateSet("INFO", "WARN", "ERROR")]
@@ -168,11 +187,11 @@ function Add-LogMessage {
         $script:LogMessages.Dequeue() | Out-Null
     }
     if(!$NoRender) {
-        Write-LogMessages
+        Write-AifbLogMessages
     }
 }
 
-function Write-LogMessages {
+function Write-AifbLogMessages {
 
     if($global:VerbosePreference) {
         $script:LogMessages | Foreach-Object {

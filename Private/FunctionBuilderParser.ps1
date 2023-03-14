@@ -1,15 +1,20 @@
+# Cached result of checking if PSScriptAnalyzer is installed
 $script:ScriptAnalyzerAvailable = $null
+# List of PSScriptAnalyzer rules to ignore when validating functions
 $script:ScriptAnalyserIgnoredRules = @(
     "PSReviewUnusedParameter"
 )
+# ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
     "PSAvoidOverwritingBuiltInCmdlets" = "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets."
-    "PSUseApprovedVerbs" = "The function is using an unapproved verb ({0})."
+    "PSUseApprovedVerbs" = "The function name is using an unapproved verb, use a valid PowerShell verb."
     "*ShouldProcess*" = "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops."
 }
+# ScriptAnalyzer custom error messages for messages matching keys in the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomMessageResponses = @{
     "*Unexpected attribute 'CmdletBinding'*" = "CmdletBinding must be followed by a param block."
 }
+# Simple functions that don't need named parameters to work out if they're being used correctly
 $script:CommandletsExemptFromNamedParameters = @(
     "Write-Host",
     "Write-Output",
@@ -22,7 +27,7 @@ $script:CommandletsExemptFromNamedParameters = @(
     "Write-Verbose"
 )
 
-function Test-ScriptAnalyzerAvailable {
+function Test-AifbScriptAnalyzerAvailable {
     <#
         .SYNOPSIS
             Checks if PSScriptAnalyzer is available on this system and uses a cached response to avoid using get-module all the time.
@@ -31,7 +36,7 @@ function Test-ScriptAnalyzerAvailable {
         if(Get-Module "PSScriptAnalyzer" -ListAvailable -Verbose:$false) {
             $script:ScriptAnalyzerAvailable = $true
         } else {
-            Add-LogMessage -Level "WARN" -Message "This module performs better if you have PSScriptAnalyzer installed"
+            Add-AifbLogMessage -Level "WARN" -Message "This module performs better if you have PSScriptAnalyzer installed"
             $script:ScriptAnalyzerAvailable = $false
         }
     }
@@ -39,18 +44,14 @@ function Test-ScriptAnalyzerAvailable {
     return $script:ScriptAnalyzerAvailable
 }
 
-function Write-ScriptAnalyzerOutput {
+function Write-AifbScriptAnalyzerOutput {
     <#
         .SYNOPSIS
             This function will analyze the function text and return the error details for the first line with errors.
-
-        .PARAMETER FunctionText
-            The text of the function to analyze.
-
-        .EXAMPLE
-            Write-ScriptAnalyzerOutput -FunctionText $functionText
     #>
+    [CmdletBinding()]
     param (
+        # A function in a text format to be formatted
         [string] $FunctionText
     )
     $scriptAnalyzerOutput = Invoke-ScriptAnalyzer -ScriptDefinition $FunctionText `
@@ -66,12 +67,12 @@ function Write-ScriptAnalyzerOutput {
         $brokenLineErrors = $firstBrokenLine.Group.Message
         $ruleNames = $firstBrokenLine.Group.RuleName
 
-        Write-Overlay -Line ($firstBrokenLine.Name) -Text $($FunctionText.Split("`n")[$firstBrokenLine.Name - 1]) -ForegroundColor "Yellow"
+        Write-AifbOverlay -Line ($firstBrokenLine.Name) -Text $($FunctionText.Split("`n")[$firstBrokenLine.Name - 1]) -ForegroundColor "Yellow"
 
         # Write the first custom error message that matches and violated PSScriptAnalyzer rules
         foreach($ruleResponse in $script:ScriptAnalyserCustomRuleResponses.GetEnumerator()) {
             if($ruleNames | Where-Object { $_ -like $ruleResponse.Key }) {
-                Write-FunctionParsingOutput $ruleResponse.Value
+                Write-AifbFunctionParsingOutput $ruleResponse.Value
                 return
             }
         }
@@ -79,71 +80,29 @@ function Write-ScriptAnalyzerOutput {
         # Write the first custom error message that matches and violated PSScriptAnalyzer message
         foreach($messageResponse in $script:ScriptAnalyserCustomMessageResponses.GetEnumerator()) {
             if($brokenLineErrors | Where-Object { $_ -like $messageResponse.Key }) {
-                Write-FunctionParsingOutput $messageResponse.Value
+                Write-AifbFunctionParsingOutput $messageResponse.Value
                 return
             }
         }
 
         # Otherwise dump the raw error messages
         $brokenLineErrors | ForEach-Object {
-            Write-FunctionParsingOutput $_
+            Write-AifbFunctionParsingOutput $_
         }
     }
 }
 
-function Remove-Comments {
+function Find-AifbCommandletOnline {
     <#
         .SYNOPSIS
-            Removes comments from a string of PowerShell code.
-
-        .DESCRIPTION
-            Removes comments from a string of PowerShell code.
-
-        .PARAMETER FunctionText
-            The string of PowerShell code to remove comments from.
+            Finds a commandlet online and installs he module it belongs to if the user wants to.
 
         .EXAMPLE
-            PS C:\> Remove-Comments "function foo { # comment 1 `n # comment 2 `n return 'bar' }"
-            function foo {  `n  `n return 'bar' }
+            Find-AifbCommandletOnline -CommandletName "Get-AzActivityLog"
     #>
+    [CmdletBinding()]
     param (
-        [Parameter(ValueFromPipeline = $true)]
-        [string] $FunctionText
-    )
-
-    process {
-        $tokens = @()
-
-        [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$tokens, [ref]$null) | Out-Null
-
-        $comments = $tokens | Where-Object { $_.Kind -eq "Comment" }
-
-        # Strip comments from bottom to top to preserve extent offsets
-        $comments | Sort-Object { $_.Extent.StartOffset } -Descending | ForEach-Object {
-            $preComment = $FunctionText.Substring(0, $_.Extent.StartOffset)
-            $postComment = $FunctionText.Substring($_.Extent.EndOffset, $FunctionText.Length - $_.Extent.EndOffset)
-            $FunctionText = $preComment + $postComment
-        }
-
-        return $FunctionText
-    }
-}
-
-function Find-CommandletOnline {
-    <#
-    .SYNOPSIS
-        Finds a commandlet online and installs he module it belongs to if the user wants to.
-
-    .PARAMETER CommandletName
-        The name of the commandlet to find online.
-
-    .OUTPUTS
-        The command if it's available after installing the module.
-
-    .EXAMPLE
-        Find-CommandletOnline -CommandletName "Get-AzActivityLog"
-    #>
-    param (
+        # The name of the commandlet to find online
         [string] $CommandletName
     )
     $command = $null
@@ -169,58 +128,54 @@ function Find-CommandletOnline {
     return $command
 }
 
-function Test-FunctionParsing {
+function Test-AifbFunctionParsing {
     <#
         .SYNOPSIS
             This function tests the quality of a PowerShell function using PSScriptAnalyzer module.
 
         .DESCRIPTION
-            The Test-FunctionParsing function checks the quality of a PowerShell script by using the PSScriptAnalyzer module.
+            The Test-AifbFunctionParsing function checks the quality of a PowerShell script by using the PSScriptAnalyzer module.
             If any errors or warnings are detected, the function outputs a list of lines containing errors and their corresponding error messages.
             If the module is not installed, the function silently bypasses script quality validation because it's not critical to the operation of the AI Script Builder.
-
-        .PARAMETER FunctionText
-            Specifies the text of the PowerShell script to be tested.
-
-        .EXAMPLE
-            Test-FunctionParsing -FunctionText "Get-ChildItem | Where-Object { $_.Length -gt 1GB }"
     #>
     [CmdletBinding()]
     param (
+        # The name of the function to be tested
         [string] $FunctionName,
+        # A function in a text format to be tested
         [string] $FunctionText
     )
 
     if(Get-Command $FunctionName -ErrorAction "SilentlyContinue") {
-        Write-Overlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -BackgroundColor "White" -ForegroundColor "Red"
-        Write-FunctionParsingOutput "The name of the function is reserved, rename the function to not collide with common function names."
+        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -BackgroundColor "White" -ForegroundColor "Red"
+        Write-AifbFunctionParsingOutput "The name of the function is reserved, rename the function to not collide with common function names."
     }
 
-    if(Test-ScriptAnalyzerAvailable) {
+    if(Test-AifbScriptAnalyzerAvailable) {
         Write-Verbose "Using PSScriptAnalyzer to validate script quality"
-        Write-ScriptAnalyzerOutput -FunctionText $FunctionText
+        Write-AifbScriptAnalyzerOutput -FunctionText $FunctionText
     } else {
-        Add-LogMessage -Level "WARN" -Message "PSScriptAnalyzer is not installed so falling back on parsing directly with PS internals."
+        Add-AifbLogMessage -Level "WARN" -Message "PSScriptAnalyzer is not installed so falling back on parsing directly with PS internals."
         try {
             [scriptblock]::Create($FunctionText) | Out-Null
         } catch {
             $innerExceptionErrors = $_.Exception.InnerException.Errors
             if($innerExceptionErrors) {
-                Write-FunctionParsingOutput $innerExceptionErrors[0].Message
+                Write-AifbFunctionParsingOutput $innerExceptionErrors[0].Message
             } else {
-                Write-FunctionParsingOutput "The script is invalid because of a $($_.FullyQualifiedErrorId)."
+                Write-AifbFunctionParsingOutput "The script is invalid because of a $($_.FullyQualifiedErrorId)."
             }
         }
     }
 }
 
-function Test-FunctionCommandletUsage {
+function Test-AifbFunctionCommandletUsage {
     <#
         .SYNOPSIS
             This function tests the usage of commandlets in a PowerShell script.
 
         .DESCRIPTION
-            The Test-FunctionCommandletUsage function checks the usage of commandlets in a PowerShell script by analyzing the Abstract Syntax Tree (AST) of the script.
+            The Test-AifbFunctionCommandletUsage function checks the usage of commandlets in a PowerShell script by analyzing the Abstract Syntax Tree (AST) of the script.
             For each commandlet found in the script, the function checks whether the commandlet is valid and whether any of the commandlet parameters are invalid.
 
         .PARAMETER FunctionText
@@ -228,11 +183,13 @@ function Test-FunctionCommandletUsage {
 
         .EXAMPLE
             $FunctionText = Get-Content -Path "C:\Scripts\MyScript.ps1" -Raw
-            Test-FunctionCommandletUsage -ScriptAst $scriptAst
+            Test-AifbFunctionCommandletUsage -ScriptAst $scriptAst
 
             This example tests the usage of commandlets in a PowerShell script.
     #>
+    [CmdletBinding()]
     param (
+        # A function in a text format to be tested
         [string] $FunctionText
     )
 
@@ -254,12 +211,12 @@ function Test-FunctionCommandletUsage {
         
         # Check online if no local command is found
         if($null -eq $command) {
-            $command = Find-CommandletOnline -CommandletName $commandletName
+            $command = Find-AifbCommandletOnline -CommandletName $commandletName
         }
 
         if($null -eq $command) {
-            Write-Overlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-            Write-FunctionParsingOutput "The commandlet $commandletName cannot be found, use a different command or write your own implementation."
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+            Write-AifbFunctionParsingOutput "The commandlet $commandletName cannot be found, use a different command or write your own implementation."
             return
         }
         
@@ -267,8 +224,8 @@ function Test-FunctionCommandletUsage {
         foreach($param in $commandletParameterNames) {
             if(![string]::IsNullOrEmpty($param)) {
                 if(!$command.Parameters.ContainsKey($param)) {
-                    Write-Overlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-                    Write-FunctionParsingOutput "The commandlet $commandletName does not take a parameter named $param, use another command."
+                    Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                    Write-AifbFunctionParsingOutput "The commandlet $commandletName does not take a parameter named $param, use another command."
                     return
                 }
             }
@@ -282,8 +239,8 @@ function Test-FunctionCommandletUsage {
                     $previousElementWasParameterName = $true
                 } else {
                     if(!$previousElementWasParameterName) {
-                        Write-Overlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-                        Write-FunctionParsingOutput "Use a named parameter when passing $element to $commandletName."
+                        Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                        Write-AifbFunctionParsingOutput "Use a named parameter when passing $element to $commandletName."
                         return
                     }
                     $previousElementWasParameterName = $false
@@ -294,8 +251,8 @@ function Test-FunctionCommandletUsage {
         # Check named parameters haven't been specified more than once
         $duplicateParameters = $commandletParameterNames | Group-Object | Where-Object { $_.Count -gt 1 } 
         foreach($duplicateParameter in $duplicateParameters) {
-            Write-Overlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-            Write-FunctionParsingOutput "The parameter $($duplicateParameter.Name) cannot be provided more than once to $commandletName."
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+            Write-AifbFunctionParsingOutput "The parameter $($duplicateParameter.Name) cannot be provided more than once to $commandletName."
             return
         }
         
@@ -320,8 +277,8 @@ function Test-FunctionCommandletUsage {
                 }
             }
             if(!$parameterSetSatisfied) {
-                Write-Overlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-                Write-FunctionParsingOutput "Parameter set cannot be resolved using the specified named parameters for $commandletName."
+                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                Write-AifbFunctionParsingOutput "Parameter set cannot be resolved using the specified named parameters for $commandletName."
                 return
             }
         }
