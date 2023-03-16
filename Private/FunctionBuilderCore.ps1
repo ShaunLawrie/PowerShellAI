@@ -4,7 +4,7 @@ $script:PowerShellAI = @{
 
 $script:SystemPrompts = @{
     ScriptWriter = "You respond to all questions with PowerShell function code with no explanations or comments. The answer will be code only and will always be in the form of a PowerShell function."
-    SemanticReinforcement = "You respond to all questions with ONLY THE WORD YES if the PowerShell function provided meets the requirements or a corrected version of the whole PowerShell function rewritten in its entirety. Remember if you say NO you need to return a corrected version of the function. Always return PowerShell code!"
+    SemanticReinforcement = "You respond to all questions with only the word YES if the PowerShell function provided meets the requirements or a corrected version of the whole PowerShell function rewritten in its entirety."
 }
 
 $script:UserPrompts = @{
@@ -55,6 +55,7 @@ function Save-AifbFunctionOutput {
         .SYNOPSIS
             Prompt the user for a destination to save their script output an save the output to disk
     #>
+    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -69,7 +70,7 @@ function Save-AifbFunctionOutput {
     $defaultFile = Join-Path $powershellAiDirectory $SuggestedFilename
     $suffix = 1
     while((Test-Path -Path $defaultFile) -and $suffix -le 10) {
-        $defaultFile = $defaultFile -replace '[0-9]+\.psm1$', "$suffix.psm1"
+        $defaultFile = $defaultFile -replace '[0-9]+\.ps1$', "$suffix.ps1"
         $suffix++
     }
 
@@ -101,6 +102,7 @@ function Remove-AifbComments {
             PS C:\> Remove-AifbComments "function foo { # comment 1 `n # comment 2 `n return 'bar' }"
             function foo {  `n  `n return 'bar' }
     #>
+    [CmdletBinding()]
     param (
         # A function in a text format to have comments stripped
         [Parameter(ValueFromPipeline = $true)]
@@ -137,6 +139,7 @@ function ConvertTo-AifbFunction {
                 Body = "function Get-Foo { Write-Host 'bar' }"
             }
     #>
+    [CmdletBinding()]
     param (
         # Some text that contains a function name and body to extract
         [Parameter(ValueFromPipeline = $true)]
@@ -161,6 +164,7 @@ function Format-AifbFunction {
         .SYNOPSIS
             Strip all comments from a PowerShell code block and use PSScriptAnalyzer to format the script if it's available
     #>
+    [CmdletBinding()]
     param (
         # A function in a text format to be formatted
         [Parameter(ValueFromPipeline = $true)]
@@ -208,6 +212,7 @@ function Test-AifbFunctionSyntax {
 
             This example tests the specified PowerShell script for quality and commandlet usage issues. If any issues are found, the function returns a prompt for corrections.
     #>
+    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -240,6 +245,7 @@ function Get-AifbSemanticFailureReason {
         .SYNOPSIS
             This function takes a chat GPT response that contains code and a reason for failing function semantic validation and returns just the reason.
     #>
+    [CmdletBinding()]
     param (
         # The text response from ChatGPT format.
         [string] $Text
@@ -251,11 +257,25 @@ function Get-AifbSemanticFailureReason {
     return $result
 }
 
+function Write-AifbChat {
+    <#
+        .SYNOPSIS
+            Write the latest chat log for debugging
+    #>
+    [CmdletBinding()]
+    param ()
+    Get-ChatInProgress | ForEach-Object {
+        Write-Host -NoNewline "$($_.role): "
+        Write-Host -ForegroundColor DarkGray $_.content
+    }
+}
+
 function Test-AifbFunctionSemantics {
     <#
         .SYNOPSIS
             This function takes a the text of a function and the original prompt used to generate it and checks that the code will achieve the goals of the original prompt.
     #>
+    [CmdletBinding()]
     param (
         # The original prompt used to generate the code provided as FunctionText
         [string] $Prompt,
@@ -281,9 +301,14 @@ function Test-AifbFunctionSemantics {
         try {
             return $response | ConvertTo-AifbFunction
         } catch {
-            Add-AifbLogMessage -Level "WARN" -Message "Following up with ChatGPT because it didn't return any code."
-            $response = Write-ChatResponse -Role "user" -Content $script:UserPrompts.SemanticFollowUp -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
-            return $response | ConvertTo-AifbFunction
+            try {
+                Add-AifbLogMessage -Level "WRN" -Message "Following up with ChatGPT because it didn't return any code."
+                $response = Write-ChatResponse -Role "user" -Content $script:UserPrompts.SemanticFollowUp -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
+                return $response | ConvertTo-AifbFunction
+            } catch {
+                Write-AifbChat
+                Write-Error "Failed to get something sensible out of ChatGPT, the chat log has been dumped above for debugging."
+            }
         }
     }
 }
@@ -293,6 +318,7 @@ function Initialize-AifbFunction {
         .SYNOPSIS
             This function creates the first version of the code that will be used to start the function builder loop.
     #>
+    [CmdletBinding()]
     param (
         # The prompt format is "Write a PowerShell function that will {PROMPT}" where prompt is just the end half
         [string] $Prompt

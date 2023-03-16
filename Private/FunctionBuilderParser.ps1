@@ -7,12 +7,14 @@ $script:ScriptAnalyserIgnoredRules = @(
 # ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
     "PSAvoidOverwritingBuiltInCmdlets" = "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets."
-    "PSUseApprovedVerbs" = "The function name is using an unapproved verb, use a valid PowerShell verb."
+    "PSUseApprovedVerbs" = "The function name is using an unapproved verb, use a valid PowerShell verb" #, some common ones are $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')."
     "*ShouldProcess*" = "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops."
 }
 # ScriptAnalyzer custom error messages for messages matching keys in the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomMessageResponses = @{
+    "Script definition uses Write-Host*" = "Avoid using Write-Host because it might not work in all hosts."
     "*Unexpected attribute 'CmdletBinding'*" = "CmdletBinding must be followed by a param block."
+    "*uses a plural noun*" = "Function name can't be a plural$(Get-AifbUnavailableFunctionNames)"
 }
 # Simple functions that don't need named parameters to work out if they're being used correctly
 $script:CommandletsExemptFromNamedParameters = @(
@@ -22,10 +24,19 @@ $script:CommandletsExemptFromNamedParameters = @(
     "Write-Warning",
     "Write-Verbose",
     "Where-Object",
-    "Foreach-Object",
+    "ForEach-Object",
     "Write-Information",
     "Write-Verbose"
 )
+$script:UnavailableCommandletNames = @()
+
+function Get-AifbUnavailableFunctionNames {
+    if($script:UnavailableCommandletNames.Count -gt 0) {
+        return " (other unavailable names are $($script:UnavailableCommandletNames | Group-Object | Select-Object -ExpandProperty "Name") -join ', ')"
+    } else {
+        return ""
+    }
+}
 
 function Test-AifbScriptAnalyzerAvailable {
     <#
@@ -36,7 +47,7 @@ function Test-AifbScriptAnalyzerAvailable {
         if(Get-Module "PSScriptAnalyzer" -ListAvailable -Verbose:$false) {
             $script:ScriptAnalyzerAvailable = $true
         } else {
-            Add-AifbLogMessage -Level "WARN" -Message "This module performs better if you have PSScriptAnalyzer installed"
+            Add-AifbLogMessage -Level "WRN" -Message "This module performs better if you have PSScriptAnalyzer installed"
             $script:ScriptAnalyzerAvailable = $false
         }
     }
@@ -147,15 +158,21 @@ function Test-AifbFunctionParsing {
     )
 
     if(Get-Command $FunctionName -ErrorAction "SilentlyContinue") {
-        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -BackgroundColor "White" -ForegroundColor "Red"
-        Write-AifbFunctionParsingOutput "The name of the function is reserved, rename the function to not collide with common function names."
+        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Yellow"
+        Write-AifbFunctionParsingOutput "The name of the function is reserved, rename the function to not collide with common function names$(Get-AifbUnavailableFunctionNames)."
+        $script:UnavailableCommandletNames += $FunctionName
+    }
+
+    if($FunctionName -notlike "*-*") {
+        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Yellow"
+        Write-AifbFunctionParsingOutput "The name of the function should follow the PowerShell format of Verb-Noun$(Get-AifbUnavailableFunctionNames)."
     }
 
     if(Test-AifbScriptAnalyzerAvailable) {
         Write-Verbose "Using PSScriptAnalyzer to validate script quality"
         Write-AifbScriptAnalyzerOutput -FunctionText $FunctionText
     } else {
-        Add-AifbLogMessage -Level "WARN" -Message "PSScriptAnalyzer is not installed so falling back on parsing directly with PS internals."
+        Add-AifbLogMessage -Level "WRN" -Message "PSScriptAnalyzer is not installed so falling back on parsing directly with PS internals."
         try {
             [scriptblock]::Create($FunctionText) | Out-Null
         } catch {
@@ -186,9 +203,13 @@ function Test-AifbFunctionCommandletUsage {
             Test-AifbFunctionCommandletUsage -ScriptAst $scriptAst
 
             This example tests the usage of commandlets in a PowerShell script.
+        .NOTES
+            This could likely be converted to a set of PSScriptAnalyzer custom rules https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/create-custom-rule?view=ps-modules
     #>
     [CmdletBinding()]
     param (
+        # The name of the function to be tested
+        [string] $FunctionName,
         # A function in a text format to be tested
         [string] $FunctionText
     )
@@ -207,6 +228,13 @@ function Test-AifbFunctionCommandletUsage {
         if($commandlet.CommandElements.Count -gt 1) {
             $commandletParameterElements = $commandlet.CommandElements[1..($commandlet.CommandElements.Count - 1)]
         }
+
+        if($commandletName -eq $FunctionName) {
+            # TODO validate recursive function parameters
+            Write-Verbose "This is a recursive function call"
+            continue
+        }
+
         $command = Get-Command $commandletName -ErrorAction "SilentlyContinue"
         
         # Check online if no local command is found
@@ -232,7 +260,7 @@ function Test-AifbFunctionCommandletUsage {
         }
 
         # Check for unnamed parameters, these are harder to validate and makes a generated script less obvious as to what it does
-        if($commandletParameterElements.Count -gt 0 -and !$script:CommandletsExemptFromNamedParameters.Contains($commandletName)) {
+        if($commandletParameterElements.Count -gt 0 -and $script:CommandletsExemptFromNamedParameters -notcontains $commandletName) {
             $previousElementWasParameterName = $false
             foreach($element in $commandletParameterElements) {
                 if($element.GetType().Name -eq "CommandParameterAst") {
@@ -257,7 +285,7 @@ function Test-AifbFunctionCommandletUsage {
         }
         
         # Check at least one parameter set is satisfied if all parameters to this commandlet have been specified by name
-        if(!$script:CommandletsExemptFromNamedParameters.Contains($commandletName)) {
+        if($script:CommandletsExemptFromNamedParameters -notcontains $commandletName) {
             $parameterSetSatisfied = $false
             if($command.ParameterSets.Count -eq 0) {
                 $parameterSetSatisfied = $true

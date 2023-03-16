@@ -5,7 +5,9 @@ function Invoke-AIErrorHelper {
         .DESCRIPTION
             Invoke-AIErrorHelper is a function that uses the OpenAI GPT-3 API to provide insights into errors that occur in a powershell script.
         .EXAMPLE
-            Invoke-AIErrorHelper    
+            Invoke-AIErrorHelper
+        .NOTES
+            Author: Shaun Lawrie
     #>
     [CmdletBinding()]
     [alias("ieh")]

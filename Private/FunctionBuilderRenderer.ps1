@@ -1,14 +1,16 @@
-# TODO MAKE A REAL RENDERING BUFFER INSTEAD OF WRITE-HOST HACKERY
+# TODO Make a real code block renderer instead of this cursor manipulating write-host hackery
 
 $script:LogMessages = [System.Collections.Queue]::new()
 $script:LogMessageColors = @{
-    "INFO" = "White"
-    "WARN" = "Yellow"
-    "ERROR" = "Red"
+    "INF" = "White"
+    "WRN" = "Yellow"
+    "ERR" = "Red"
 }
 $script:LogMessagesMaxCount = 8
 $script:FunctionTopLeft = @{X = 0; Y = 0}
 $script:LogMessagesTopLeft = @{X = 0; Y = 0}
+$script:RendererBackground = @{ R = 35; G = 35; B = 35; }
+$script:FunctionVersion = 0
 
 function Initialize-AifbRenderer {
     <#
@@ -19,7 +21,7 @@ function Initialize-AifbRenderer {
     $script:FunctionTopLeft.X = $currentPosition.X
     $script:FunctionTopLeft.Y = $currentPosition.Y + 1
     $script:LogMessages = [System.Collections.Queue]::new()
-    Add-AifbLogMessage "Initialized function renderer at position [$($script:FunctionTopLeft.X), $($script:FunctionTopLeft.Y)]" -NoRender
+    $script:FunctionVersion = 0
 }
 
 function Write-AifbFunctionParsingOutput {
@@ -27,12 +29,38 @@ function Write-AifbFunctionParsingOutput {
         .SYNOPSIS
             Writes parsing output to the output stream and also to the renderer log output as errors.
     #>
+    [CmdletBinding()]
     param (
         # The message to log and format
         [string] $Message
     )
-    Add-AifbLogMessage -Level "WARN" -Message $Message
+    Add-AifbLogMessage -Level "WRN" -Message $Message
     Write-Output " - $Message"
+}
+
+function Get-AifbTokenColor {
+    <#
+        .SYNOPSIS
+            Given a syntax token provide a color based on its type.
+    #>
+    param (
+        # The kind of token identified by the PowerShell language parser
+        [System.Management.Automation.Language.TokenKind] $Kind,
+        # TokenFlags identified by the PowerShell language parser
+        [System.Management.Automation.Language.TokenFlags] $TokenFlags
+    )
+    $ForegroundRgb = switch -wildcard ($Kind) {
+        "Function" { @{ R = 255; G = 123; B = 114 } }
+        "Generic" { @{ R = 199; G = 159; B = 252 } }
+        "String*" { @{ R = 143; G = 185; B = 221 } }
+        "Variable" { @{ R = 255; G = 255; B = 255 } }
+        "Identifier" { @{ R = 110; G = 174; B = 231 } }
+        default { @{ R = 200; G = 200; B = 200 } }
+    }
+    if($TokenFlags -like "*operator*" -or $TokenFlags -like "*keyword*") {
+        $ForegroundRgb =  @{ R = 255; G = 123; B = 114 }
+    }
+    return $ForegroundRgb
 }
 
 function Write-AifbFunctionOutput {
@@ -49,31 +77,39 @@ function Write-AifbFunctionOutput {
         # The text of the function to render
         [string] $FunctionText,
         # Whether to syntax highlight the function
-        [switch] $SyntaxHighlight
+        [switch] $SyntaxHighlight,
+        # The background color for the code block
+        [hashtable] $BackgroundRgb = $script:RendererBackground
     )
 
-    # Write it all to the terminal and don't overwrite on every render, this makes debugging easier
+    $script:FunctionVersion++
+    $FunctionText = $FunctionText + "`n`n# AIFunctionBuilder Iteration $($script:FunctionVersion)"
+    $consoleWidth = $Host.UI.RawUI.WindowSize.Width
+
+    # Write it all to the terminal and don't overwrite on every render in verbose mode, this makes debugging easier
     if($VerbosePreference -ne "SilentlyContinue") {
-        Write-Verbose $Stage
-        Write-Verbose $FunctionText
-        Write-AifbLogMessages
+        Write-Verbose "Function text:`n$FunctionText"
         return
     }
 
     # Initialise cursor position at the top left of the function
     [Console]::SetCursorPosition($script:FunctionTopLeft.X, $script:FunctionTopLeft.Y)
     
-    $OutputLines = @()
+    $outputLines = @()
+    $colorEscapeCode = "$([Char]27)[48;2;{0};{1};{2}m" -f $BackgroundRgb.R, $BackgroundRgb.G, $BackgroundRgb.B
     if($null -ne $FunctionText) {
-        $OutputLines = $FunctionText.Split("`n")
-        foreach($line in $OutputLines) {
-            Write-Host -ForegroundColor DarkGray ("$([Char]27)[48;2;25;25;25m" + $line + (" " * ($Host.UI.RawUI.WindowSize.Width - $line.Length)))
+        $outputLines = $FunctionText.Split("`n")
+        foreach($line in $outputLines) {
+            if($line.Length -gt $consoleWidth) {
+                $line = $line.Substring(0, ($consoleWidth - 3)) + "..."
+            }
+            Write-Host -ForegroundColor DarkGray ($colorEscapeCode + $line + (" " * ($consoleWidth - $line.Length)))
             if(!$SyntaxHighlight) {
                 Start-Sleep -Milliseconds 20
             }
         }
     } else {
-        Write-Error "No function was provided to the renderer"
+        Write-Error "No function was provided to the renderer" -ErrorAction "Stop"
     }
 
     # Clear text formatting
@@ -81,7 +117,7 @@ function Write-AifbFunctionOutput {
 
     # Add a space between the function and the log
     $endOfFunctionPosition = $Host.UI.RawUI.CursorPosition
-    Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
+    Write-Host (" " * $consoleWidth)
 
     # Write the function with some basic colors
     if($SyntaxHighlight) {
@@ -89,24 +125,20 @@ function Write-AifbFunctionOutput {
         [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$tokens, [ref]$null) | Out-Null
 
         foreach($token in $tokens) {
-            $TokenColor = switch -wildcard ($token.Kind) {
-                "Function" { "$([Char]27)[48;2;255;123;114m)" }
-                "Generic" { "$([Char]27)[48;2;199;159;242m)" }
-                "String*" { "$([Char]27)[48;2;143;185;221m)" }
-                "Variable" { "$([Char]27)[48;2;255;255;255m)" }
-                "Identifier" { "$([Char]27)[48;2;110;174;231m)" }
-                default { "$([Char]27)[48;2;220;220;220m)" }
+            $ForegroundRgb = Get-AifbTokenColor -Kind $token.Kind -TokenFlags $token.TokenFlags
+            Write-AifbOverlay -Line $token.Extent.StartLineNumber -Column $token.Extent.StartColumnNumber -Text $token.Text -ForegroundRgb $ForegroundRgb -BackgroundRgb $BackgroundRgb
+            $nestedTokens = ($token | Where-Object { $_.Kind -eq "StringExpandable" -and $_.NestedTokens }).NestedTokens
+            # Do one level deep nested token parsing to make string interpolation look good
+            foreach($nestedToken in $nestedTokens) {
+                $ForegroundRgb = Get-AifbTokenColor -Kind $nestedToken.Kind -TokenFlags $nestedToken.TokenFlags
+                Write-AifbOverlay -Line $nestedToken.Extent.StartLineNumber -Column $nestedToken.Extent.StartColumnNumber -Text $nestedToken.Text -ForegroundRgb $ForegroundRgb -BackgroundRgb $BackgroundRgb
             }
-            if($token.TokenFlags -like "*operator*" -or $token.TokenFlags -like "*keyword*") {
-                $TokenColor = "$([Char]27)[48;2;255;123;114m)"
-            }
-            Write-AifbOverlay -Line $token.Extent.StartLineNumber -Column $token.Extent.StartColumnNumber -Text ($TokenColor + $token.Text)
         }
     }
 
     [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y)
-    5..($Host.UI.RawUI.WindowSize.Height - $script:FunctionTopLeft.Y - $OutputLines.Count) | Foreach-Object {
-        Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
+    5..($Host.UI.RawUI.WindowSize.Height - $script:FunctionTopLeft.Y - $outputLines.Count) | Foreach-Object {
+        Write-Host (" " * $consoleWidth)
     }
     
     [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y + 1)
@@ -133,18 +165,22 @@ function Write-AifbOverlay {
         .PARAMETER Column
             The column to write to.
     #>
+    [CmdletBinding()]
     param (
         [string] $Text,
-        [string] $ForegroundColor,
+        [string] $ForegroundColor = $null,
         [string] $BackgroundColor = $null,
+        [hashtable] $ForegroundRgb = $null,
+        [hashtable] $BackgroundRgb = $script:RendererBackground,
         [ValidateRange(1, [int]::MaxValue)]
         [int] $Line,
         [ValidateRange(1, [int]::MaxValue)]
         [int] $Column = 1
     )
 
-    if($global:VerbosePreference -eq "Continue") {
-        Write-Error $Text
+    # Write it all to the terminal and don't overwrite on every render, this makes debugging easier
+    if($VerbosePreference -ne "SilentlyContinue") {
+        Write-Verbose "Overlay text for line $Line, column ${Column}: $FunctionText"
         return
     }
 
@@ -153,15 +189,35 @@ function Write-AifbOverlay {
         [Console]::CursorVisible = $false
         $x = $script:FunctionTopLeft.X + $Column - 1
         $y = $script:FunctionTopLeft.Y + $Line - 1
-        [Console]::SetCursorPosition($x, $y)
-        foreach($letter in $Text.ToCharArray()) {
-            if($BackgroundColor) {
-                Write-Host -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor -NoNewline $letter
-            } else {
-                Write-Host -ForegroundColor $ForegroundColor -NoNewline ("$([Char]27)[48;2;25;25;25m" + $letter)
-            }
-            Write-Host -NoNewline "$([Char]27)[0m"
+        if(($x + $Text.Length) -gt ($Host.UI.RawUI.WindowSize.Width - 3)) {
+            Write-Verbose "Skipping writing an overlay because the line is wider than the console"
+            return
         }
+        [Console]::SetCursorPosition($x, $y)
+
+        $writeHostParams = @{
+            "NoNewline" = $true
+        }
+
+        if($ForegroundColor) {
+            $writeHostParams["ForegroundColor"] = $ForegroundColor
+        }
+        if($BackgroundColor) {
+            $writeHostParams["BackgroundColor"] = $BackgroundColor
+        }
+
+        $colorEscapeCode = ""
+        if($ForegroundRgb) {
+            $colorEscapeCode += "$([Char]27)[38;2;{0};{1};{2}m" -f $ForegroundRgb.R, $ForegroundRgb.G, $ForegroundRgb.B
+        }
+        if($BackgroundRgb) {
+            $colorEscapeCode += "$([Char]27)[48;2;{0};{1};{2}m" -f $BackgroundRgb.R, $BackgroundRgb.G, $BackgroundRgb.B
+        }
+
+        foreach($letter in $Text.ToCharArray()) {
+            Write-Host @writeHostParams ($colorEscapeCode + $letter)
+        }
+        Write-Host -NoNewline "$([Char]27)[0m"
     } finally {
         [Console]::CursorVisible = $true
         [Console]::SetCursorPosition($initialCursorPosition.X, $initialCursorPosition.Y)
@@ -169,12 +225,15 @@ function Write-AifbOverlay {
 }
 
 function Add-AifbLogMessage {
+    [CmdletBinding()]
     param (
         [string] $Message,
-        [ValidateSet("INFO", "WARN", "ERROR")]
-        [string] $Level = "INFO",
+        [ValidateSet("INF", "WRN", "ERR")]
+        [string] $Level = "INF",
         [switch] $NoRender
     )
+
+    Write-Verbose "$Level $Message"
 
     $logItem = @{
         Date = (Get-Date).ToString("HH:mm:ss")
@@ -186,17 +245,17 @@ function Add-AifbLogMessage {
     if($script:LogMessages.Count -gt $script:LogMessagesMaxCount) {
         $script:LogMessages.Dequeue() | Out-Null
     }
+
     if(!$NoRender) {
         Write-AifbLogMessages
     }
 }
 
 function Write-AifbLogMessages {
+    [CmdletBinding()]
+    param()
 
-    if($global:VerbosePreference) {
-        $script:LogMessages | Foreach-Object {
-            Write-Verbose "$($_.Date) $($_.Level) $($_.Message)"
-        }
+    if($VerbosePreference) {
         return
     }
 
@@ -215,10 +274,10 @@ function Write-AifbLogMessages {
         foreach($line in $lines) {
             if($lineNumber -eq 0) {
                 $message = $logPrefix + " $line"
-                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($Host.UI.RawUI.WindowSize.Width - $message.Length)))
+                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
             } else {
                 $message = (" " * $logPrefix.Length) + " $line"
-                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($Host.UI.RawUI.WindowSize.Width - $message.Length)))
+                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
             }
             $lineNumber++
         }   

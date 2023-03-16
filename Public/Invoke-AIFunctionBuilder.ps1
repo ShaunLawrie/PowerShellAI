@@ -8,6 +8,8 @@ function Invoke-AIFunctionBuilder {
             of the AI generated script using parsing techniques that feed common issues back to the model until it resolves them.
         .EXAMPLE
             Invoke-AIFunctionBuilder
+        .NOTES
+            Author: Shaun Lawrie
     #>
     [CmdletBinding()]
     [alias("ifb")]
@@ -23,7 +25,7 @@ function Invoke-AIFunctionBuilder {
     $prePrompt = $null
     if([string]::IsNullOrEmpty($Prompt)) {
         $prePrompt = "Write a PowerShell function that will"
-        Write-Host -ForegroundColor Green -NoNewline "`n${prePrompt}: "
+        Write-Host -ForegroundColor Cyan -NoNewline "${prePrompt}: "
         $Prompt = Read-Host
     }
     $postPrompt = @($prePrompt, $Prompt) -join " "
@@ -31,15 +33,15 @@ function Invoke-AIFunctionBuilder {
     $iteration = 1
 
     Write-Verbose "Sending initial prompt for completion: '$postPrompt'"
-    $currentFunction = Initialize-Function -Prompt $postPrompt
+    $currentFunction = Initialize-AifbFunction -Prompt $postPrompt
 
     Initialize-AifbRenderer
     Write-AifbFunctionOutput -FunctionText $currentFunction.Body
 
     while ($true) {
         if($iteration -gt $MaximumReinforcementIterations) {
-            Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit"
-            return
+            Write-AifbChat
+            Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit" -ErrorAction "Stop"
         }
         
         $correctionPrompt = Test-AifbFunctionSyntax -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
@@ -52,6 +54,7 @@ function Invoke-AIFunctionBuilder {
             $currentFunction = Test-AifbFunctionSemantics -FunctionText $currentFunction.Body -Prompt $Prompt
             Write-AifbFunctionOutput -FunctionText $currentFunction.Body
         } else {
+            Add-AifbLogMessage "Function building is complete!"
             break
         }
 
@@ -64,9 +67,12 @@ function Invoke-AIFunctionBuilder {
 
     switch($action) {
         "Run" {
-            $scriptLocation = Save-AifbFunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
-            Write-Host "Importing module file $scriptLocation'`n`nYou can now use this function"
-            Import-Module $scriptLocation
+            $tempFile = New-TemporaryFile
+            $tempFilePsm1 = "$($tempFile.FullName).psm1"
+            Set-Content -Path $tempFile -Value $currentFunction.Body
+            Move-Item -Path $tempFile.FullName -Destination $tempFilePsm1
+            Write-Host "Importing function '$($currentFunction.Name)'"
+            Import-Module $tempFilePsm1 -Global -Verbose
         }
         "Save" {
             Save-AifbFunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
