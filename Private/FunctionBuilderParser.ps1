@@ -6,15 +6,16 @@ $script:ScriptAnalyserIgnoredRules = @(
 )
 # ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
-    "PSAvoidOverwritingBuiltInCmdlets" = "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets."
-    "PSUseApprovedVerbs" = "The function name is using an unapproved verb, use a valid PowerShell verb" #, some common ones are $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')."
-    "*ShouldProcess*" = "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops."
+    "PSAvoidOverwritingBuiltInCmdlets" = { "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets." }
+    "PSUseApprovedVerbs" = { "The function name is using an unapproved verb it has to be of the format VERB-NOUN using a valid PowerShell verb like $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')." }
+    "*ShouldProcess*" = { "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops." }
 }
 # ScriptAnalyzer custom error messages for messages matching keys in the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomMessageResponses = @{
-    "Script definition uses Write-Host*" = "Avoid using Write-Host because it might not work in all hosts."
-    "*Unexpected attribute 'CmdletBinding'*" = "CmdletBinding must be followed by a param block."
-    "*uses a plural noun*" = "Function name can't be a plural$(Get-AifbUnavailableFunctionNames)"
+    "Script definition uses Write-Host*" = { "Avoid using Write-Host because it might not work in all hosts." }
+    "*Unexpected attribute 'CmdletBinding'*" = { "CmdletBinding must be followed by a param block." }
+    "*uses a plural noun*" = { "Function name can't be a plural$(Get-AifbUnavailableFunctionNames)" }
+    "*':' was not followed by a valid variable name character*" = { 'A variable inside a PowerShell string cannot be followed by a colon, rewrite $foo: needs to be ${foo}: to delimit the variable.' }
 }
 # Simple functions that don't need named parameters to work out if they're being used correctly
 $script:CommandletsExemptFromNamedParameters = @(
@@ -26,13 +27,18 @@ $script:CommandletsExemptFromNamedParameters = @(
     "Where-Object",
     "ForEach-Object",
     "Write-Information",
-    "Write-Verbose"
+    "Write-Verbose",
+    "Select-Object"
 )
 $script:UnavailableCommandletNames = @()
 
 function Get-AifbUnavailableFunctionNames {
+    <#
+        .SYNOPSIS
+            Gets a list of function names that have already been attempted that do not work.
+    #>
     if($script:UnavailableCommandletNames.Count -gt 0) {
-        return " (other unavailable names are $($script:UnavailableCommandletNames | Group-Object | Select-Object -ExpandProperty "Name") -join ', ')"
+        return " (other unavailable names are $(($script:UnavailableCommandletNames | Group-Object | Select-Object -ExpandProperty "Name") -join ', '))"
     } else {
         return ""
     }
@@ -60,7 +66,6 @@ function Write-AifbScriptAnalyzerOutput {
         .SYNOPSIS
             This function will analyze the function text and return the error details for the first line with errors.
     #>
-    [CmdletBinding()]
     param (
         # A function in a text format to be formatted
         [string] $FunctionText
@@ -83,7 +88,7 @@ function Write-AifbScriptAnalyzerOutput {
         # Write the first custom error message that matches and violated PSScriptAnalyzer rules
         foreach($ruleResponse in $script:ScriptAnalyserCustomRuleResponses.GetEnumerator()) {
             if($ruleNames | Where-Object { $_ -like $ruleResponse.Key }) {
-                Write-AifbFunctionParsingOutput $ruleResponse.Value
+                Write-AifbFunctionParsingOutput (Invoke-Command $ruleResponse.Value)
                 return
             }
         }
@@ -91,7 +96,7 @@ function Write-AifbScriptAnalyzerOutput {
         # Write the first custom error message that matches and violated PSScriptAnalyzer message
         foreach($messageResponse in $script:ScriptAnalyserCustomMessageResponses.GetEnumerator()) {
             if($brokenLineErrors | Where-Object { $_ -like $messageResponse.Key }) {
-                Write-AifbFunctionParsingOutput $messageResponse.Value
+                Write-AifbFunctionParsingOutput (Invoke-Command $messageResponse.Value)
                 return
             }
         }
@@ -111,15 +116,26 @@ function Find-AifbCommandletOnline {
         .EXAMPLE
             Find-AifbCommandletOnline -CommandletName "Get-AzActivityLog"
     #>
-    [CmdletBinding()]
     param (
         # The name of the commandlet to find online
         [string] $CommandletName
     )
     $command = $null
     $onlineModules = Find-Module -Command $CommandletName -Verbose:$false
+    $localModules = Get-Module -ListAvailable -Verbose:$false
     if($onlineModules) {
-        Write-Host "There are modules online that include the functions used by ChatGPT. To validate the usage of commandlets in the function the module needs to be installed locally.`n"
+        $matchingLocalModules = (Compare-Object -ReferenceObject $onlineModules.Name -DifferenceObject $localModules.Name -ExcludeDifferent)
+        if($matchingLocalModules) {
+            try {
+                Import-Module $matchingLocalModules[0]
+                $command = Get-Command $CommandletName
+                return $command
+            } catch {
+                Write-Warning "Couldn't import command from local module '$($matchingLocalModules[0])'"
+            }
+        }
+
+        Write-Host "There are modules online that include the function '$CommandletName' used by ChatGPT. To validate the usage of commandlets in the function the module needs to be installed locally.`n"
         Write-Host ($onlineModules | Select-Object Name, ProjectUri | Out-String).Trim()
         while($null -eq $command) {
             $onlineModuleToInstall = Read-Host "`nEnter the name of one of the modules to install or press enter to get ChatGPT to try use a different command"
@@ -149,7 +165,6 @@ function Test-AifbFunctionParsing {
             If any errors or warnings are detected, the function outputs a list of lines containing errors and their corresponding error messages.
             If the module is not installed, the function silently bypasses script quality validation because it's not critical to the operation of the AI Script Builder.
     #>
-    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -206,7 +221,6 @@ function Test-AifbFunctionCommandletUsage {
         .NOTES
             This could likely be converted to a set of PSScriptAnalyzer custom rules https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/create-custom-rule?view=ps-modules
     #>
-    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -231,7 +245,7 @@ function Test-AifbFunctionCommandletUsage {
 
         if($commandletName -eq $FunctionName) {
             # TODO validate recursive function parameters
-            Write-Verbose "This is a recursive function call"
+            Add-AifbLogMessage -Message "This function recursively calls itself"
             continue
         }
 
@@ -261,6 +275,11 @@ function Test-AifbFunctionCommandletUsage {
 
         # Check for unnamed parameters, these are harder to validate and makes a generated script less obvious as to what it does
         if($commandletParameterElements.Count -gt 0 -and $script:CommandletsExemptFromNamedParameters -notcontains $commandletName) {
+            # TODO backtrack for splatting and find the keys provided to make sure they are correct parameters
+            if($commandletParameterElements[0] -like "@*") {
+                continue
+            }
+
             $previousElementWasParameterName = $false
             foreach($element in $commandletParameterElements) {
                 if($element.GetType().Name -eq "CommandParameterAst") {

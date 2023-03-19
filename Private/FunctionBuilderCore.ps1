@@ -9,7 +9,7 @@ $script:SystemPrompts = @{
 
 $script:UserPrompts = @{
     SemanticReinforcement = @'
-Will this PowerShell function {0}?
+Will this PowerShell function meet the requirement: {0}?
 If it doesn't meet ALL requirements then rewrite the function so that it does and explain what was missing.
 
 ```powershell
@@ -42,10 +42,11 @@ function Get-AifbUserAction {
     $actions = @(
         New-Object System.Management.Automation.Host.ChoiceDescription '&Save', 'Save this function to your local filesystem'
         New-Object System.Management.Automation.Host.ChoiceDescription '&Run', 'Save this function to your local filesystem and load it into this PowerShell session'
+        New-Object System.Management.Automation.Host.ChoiceDescription '&Edit', 'Request changes to this function'
         New-Object System.Management.Automation.Host.ChoiceDescription '&Quit', 'Exit AIFunctionBuilder'
     )
 
-    $response = $Host.UI.PromptForChoice($null, "What do you want to do?", $actions, 2)
+    $response = $Host.UI.PromptForChoice($null, "What do you want to do?", $actions, 3)
 
     return $actions[$response].Label -replace '&', ''
 }
@@ -55,7 +56,6 @@ function Save-AifbFunctionOutput {
         .SYNOPSIS
             Prompt the user for a destination to save their script output an save the output to disk
     #>
-    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -102,7 +102,6 @@ function Remove-AifbComments {
             PS C:\> Remove-AifbComments "function foo { # comment 1 `n # comment 2 `n return 'bar' }"
             function foo {  `n  `n return 'bar' }
     #>
-    [CmdletBinding()]
     param (
         # A function in a text format to have comments stripped
         [Parameter(ValueFromPipeline = $true)]
@@ -139,7 +138,6 @@ function ConvertTo-AifbFunction {
                 Body = "function Get-Foo { Write-Host 'bar' }"
             }
     #>
-    [CmdletBinding()]
     param (
         # Some text that contains a function name and body to extract
         [Parameter(ValueFromPipeline = $true)]
@@ -164,7 +162,6 @@ function Format-AifbFunction {
         .SYNOPSIS
             Strip all comments from a PowerShell code block and use PSScriptAnalyzer to format the script if it's available
     #>
-    [CmdletBinding()]
     param (
         # A function in a text format to be formatted
         [Parameter(ValueFromPipeline = $true)]
@@ -212,7 +209,6 @@ function Test-AifbFunctionSyntax {
 
             This example tests the specified PowerShell script for quality and commandlet usage issues. If any issues are found, the function returns a prompt for corrections.
     #>
-    [CmdletBinding()]
     param (
         # The name of the function to be tested
         [string] $FunctionName,
@@ -245,9 +241,9 @@ function Get-AifbSemanticFailureReason {
         .SYNOPSIS
             This function takes a chat GPT response that contains code and a reason for failing function semantic validation and returns just the reason.
     #>
-    [CmdletBinding()]
     param (
         # The text response from ChatGPT format.
+        [Parameter(ValueFromPipeline = $true)]
         [string] $Text
     )
 
@@ -262,7 +258,6 @@ function Write-AifbChat {
         .SYNOPSIS
             Write the latest chat log for debugging
     #>
-    [CmdletBinding()]
     param ()
     Get-ChatInProgress | ForEach-Object {
         Write-Host -NoNewline "$($_.role): "
@@ -275,7 +270,6 @@ function Test-AifbFunctionSemantics {
         .SYNOPSIS
             This function takes a the text of a function and the original prompt used to generate it and checks that the code will achieve the goals of the original prompt.
     #>
-    [CmdletBinding()]
     param (
         # The original prompt used to generate the code provided as FunctionText
         [string] $Prompt,
@@ -285,7 +279,7 @@ function Test-AifbFunctionSemantics {
 
     New-Chat $script:SystemPrompts.SemanticReinforcement -Verbose:$false
     
-    Add-AifbLogMessage "Waiting for gpt-3.5-turbo to validate semantics."
+    Add-AifbLogMessage "Waiting for gpt-3.5-turbo to validate semantics for prompt '$Prompt'."
     $response = Write-ChatResponse -Role "user" -Content ($script:UserPrompts.SemanticReinforcement -f $Prompt, $FunctionText) -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
     $response = $response.Trim()
 
@@ -294,10 +288,11 @@ function Test-AifbFunctionSemantics {
         return $FunctionText | ConvertTo-AifbFunction
     } else {
         try {
-            Add-AifbLogMessage -Level "ERROR" -Message ($Matches[1] | Get-AifbSemanticFailureReason)
+            Add-AifbLogMessage -Level "ERR" -Message ($response | Get-AifbSemanticFailureReason)
         } catch {
-            Add-AifbLogMessage -Level "ERROR" -Message "The function doesn't meet the original intent of the prompt."
+            Add-AifbLogMessage -Level "ERR" -Message "The function doesn't meet the original intent of the prompt."
         }
+        Start-Sleep -Seconds 10
         try {
             return $response | ConvertTo-AifbFunction
         } catch {
@@ -318,11 +313,58 @@ function Initialize-AifbFunction {
         .SYNOPSIS
             This function creates the first version of the code that will be used to start the function builder loop.
     #>
-    [CmdletBinding()]
     param (
-        # The prompt format is "Write a PowerShell function that will {PROMPT}" where prompt is just the end half
+        # The prompt format is "Write a PowerShell function that will do something"
         [string] $Prompt
     )
+
+    Write-Verbose "Getting initial powershell function with prompt '$Prompt'"
+    Add-AifbLogMessage -NoRender "Waiting for code-davinci-001 to correct syntax issues."
+
     New-Chat $script:SystemPrompts.ScriptWriter -Verbose:$false
     return Write-ChatResponse -Role "user" -Content $Prompt -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive | ConvertTo-AifbFunction
+}
+
+function Optimize-AifbFunction {
+    <#
+        .SYNOPSIS
+            This function takes a the text of a function and the original prompt used to generate it and iterates on it until it meets the intent
+            of the original prompt and is also syntacticly correct.
+    #>
+    param (
+        # The original prompt
+        [string] $Prompt,
+        # The initial state of the function
+        [hashtable] $Function,
+        # The maximum number of times to loop before giving up
+        [int] $MaximumReinforcementIterations = 15,
+        # Force semantic re-evaluation
+        [switch] $Force
+    )
+
+    $iteration = 1
+    while ($true) {
+        if($iteration -gt $MaximumReinforcementIterations) {
+            Write-AifbChat
+            Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit" -ErrorAction "Stop"
+        }
+        
+        $correctionPrompt = Test-AifbFunctionSyntax -FunctionText $Function.Body -FunctionName $Function.Name
+        
+        if($correctionPrompt -or ($Force -and $iteration -eq 1)) {
+            Add-AifbLogMessage "Waiting for code-davinci-001 to correct syntax issues."
+            $Function = (Get-OpenAIEdit -InputText $Function.Body -Instruction $correctionPrompt).text | ConvertTo-AifbFunction
+            Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
+
+            $Function = Test-AifbFunctionSemantics -FunctionText $Function.Body -Prompt $Prompt
+            Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
+        } else {
+            Add-AifbLogMessage "Function building is complete!"
+            break
+        }
+
+        $iteration++
+    }
+
+    return $Function
 }

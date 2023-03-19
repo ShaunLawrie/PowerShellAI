@@ -1,7 +1,7 @@
 function Invoke-AIFunctionBuilder {
     <#
         .SYNOPSIS
-            Create a PowerShell script with the help of ChatGPT
+            Create a PowerShell function with the help of ChatGPT
         .DESCRIPTION
             Invoke-AIFunctionBuilder is a function that uses ChatGPT to generate an initial PowerShell function to achieve the goal defined
             in the prompt by the user but goes a few steps beyond the typical interaction with an LLM by auto-validating the result
@@ -22,60 +22,55 @@ function Invoke-AIFunctionBuilder {
 
     $ErrorActionPreference = "SilentlyContinue"
 
+    Clear-Host
+
     $prePrompt = $null
     if([string]::IsNullOrEmpty($Prompt)) {
         $prePrompt = "Write a PowerShell function that will"
         Write-Host -ForegroundColor Cyan -NoNewline "${prePrompt}: "
         $Prompt = Read-Host
     }
-    $postPrompt = @($prePrompt, $Prompt) -join " "
+    $fullPrompt = (@($prePrompt, $Prompt) | Where-Object { $null -ne $_ }) -join ' '
 
-    $iteration = 1
-
-    Write-Verbose "Sending initial prompt for completion: '$postPrompt'"
-    $currentFunction = Initialize-AifbFunction -Prompt $postPrompt
+    $function = Initialize-AifbFunction -Prompt $fullPrompt
 
     Initialize-AifbRenderer
-    Write-AifbFunctionOutput -FunctionText $currentFunction.Body
+    Write-AifbFunctionOutput -FunctionText $function.Body -Prompt $fullPrompt
 
-    while ($true) {
-        if($iteration -gt $MaximumReinforcementIterations) {
-            Write-AifbChat
-            Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit" -ErrorAction "Stop"
-        }
-        
-        $correctionPrompt = Test-AifbFunctionSyntax -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
-        
-        if($correctionPrompt) { 
-            Add-AifbLogMessage "Waiting for code-davinci-001 to correct syntax issues."
-            $currentFunction = (Get-OpenAIEdit -InputText $currentFunction.Body -Instruction $correctionPrompt).text | ConvertTo-AifbFunction
-            Write-AifbFunctionOutput -FunctionText $currentFunction.Body
+    $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt
 
-            $currentFunction = Test-AifbFunctionSemantics -FunctionText $currentFunction.Body -Prompt $Prompt
-            Write-AifbFunctionOutput -FunctionText $currentFunction.Body
-        } else {
-            Add-AifbLogMessage "Function building is complete!"
-            break
-        }
+    Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
 
-        $iteration++
-    }
+    $finished = $false
+    while(-not $finished) {
+        $action = Get-AifbUserAction -Function $function
 
-    Write-AifbFunctionOutput -FunctionText $currentFunction.Body -SyntaxHighlight
-
-    $action = Get-AifbUserAction -Filename $suggestedFilename
-
-    switch($action) {
-        "Run" {
-            $tempFile = New-TemporaryFile
-            $tempFilePsm1 = "$($tempFile.FullName).psm1"
-            Set-Content -Path $tempFile -Value $currentFunction.Body
-            Move-Item -Path $tempFile.FullName -Destination $tempFilePsm1
-            Write-Host "Importing function '$($currentFunction.Name)'"
-            Import-Module $tempFilePsm1 -Global -Verbose
-        }
-        "Save" {
-            Save-AifbFunctionOutput -FunctionText $currentFunction.Body -FunctionName $currentFunction.Name
+        switch($action) {
+            "Edit" {
+                $editPrePrompt = "I also want the function to"
+                Write-Host -ForegroundColor Cyan -NoNewline "${editPrePrompt}: "
+                $editPrompt = Read-Host
+                Write-Verbose "Re-running function optimizer with a request to edit functionality: '$editPrompt'"
+                $fullPrompt = (@($fullPrompt, $editPrompt) | Where-Object { $null -ne $_ }) -join ' AND '
+                $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt -Force
+                Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
+            }
+            "Run" {
+                $tempFile = New-TemporaryFile
+                $tempFilePsm1 = "$($tempFile.FullName).psm1"
+                Set-Content -Path $tempFile -Value $function.Body
+                Move-Item -Path $tempFile.FullName -Destination $tempFilePsm1
+                Write-Host "Importing function '$($function.Name)'"
+                Import-Module $tempFilePsm1 -Global -Verbose
+                $finished = $true
+            }
+            "Save" {
+                Save-AifbFunctionOutput -FunctionText $function.Body -FunctionName $function.Name
+                $finished = $true
+            }
+            "Quit" {
+                $finished = $true
+            }
         }
     }
 }
