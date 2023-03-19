@@ -114,6 +114,7 @@ function Write-AifbFunctionOutput {
     while(!(Test-AifbFunctionFitsInTerminal -FunctionText $FunctionText)) {
         [Console]::SetCursorPosition($script:FunctionTopLeft.X, $script:FunctionTopLeft.Y)
         Write-Warning "Zoom out to fit the function in your terminal window, the function length exceeds the height of your terminal"
+        [Console]::SetCursorPosition($script:FunctionTopLeft.X, $script:FunctionTopLeft.Y)
         Start-Sleep -Seconds 1
     }
     
