@@ -258,7 +258,8 @@ function Test-AifbFunctionCommandletUsage {
 
         if($null -eq $command) {
             Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-            Write-AifbFunctionParsingOutput "The commandlet $commandletName cannot be found, use a different command or write your own implementation."
+            Write-AifbFunctionParsingOutput "The commandlet $commandletName cannot be found, use a different command or write your own implementation$(Get-AifbUnavailableFunctionNames)."
+            $script:UnavailableCommandletNames += $commandletName
             return
         }
         
