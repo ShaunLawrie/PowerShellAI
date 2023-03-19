@@ -293,7 +293,6 @@ function Write-AifbOverlay {
         # Multiline tokens need to be split before rendering to handle the gutter indent
         $tokenLinesRendered = 0
         foreach($tokenLine in $Text.Split("`n")) {
-            $tokenLine = $tokenLine.Trim()
             # Overruns are parts of this token that extend beyond the width of the terminal and need their own line wrapping
             $overrunText = @()
             # This token might be on a wrapped part of this line, make sure to find the correct start point
