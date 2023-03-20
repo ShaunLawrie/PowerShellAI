@@ -7,7 +7,7 @@ $script:ScriptAnalyserIgnoredRules = @(
 # ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
     "PSAvoidOverwritingBuiltInCmdlets" = { "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets." }
-    "PSUseApprovedVerbs" = { "The function name is using an unapproved verb it has to be of the format VERB-NOUN using a valid PowerShell verb like $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')." }
+    "PSUseApprovedVerbs" = { "The function name has to start with a valid PowerShell verb like $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')." }
     "*ShouldProcess*" = { "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops." }
 }
 # ScriptAnalyzer custom error messages for messages matching keys in the hashtable because the default errors trip up LLM models
@@ -275,7 +275,7 @@ function Test-AifbFunctionCommandletUsage {
         }
 
         # Check for unnamed parameters, these are harder to validate and makes a generated script less obvious as to what it does
-        if($commandletParameterElements.Count -gt 0 -and $script:CommandletsExemptFromNamedParameters -notcontains $commandletName) {
+        if($commandletParameterElements.Count -gt 0 -and $script:CommandletsExemptFromNamedParameters -notcontains $commandletName -and $commandletName -like "*-*") {
             # TODO backtrack for splatting and find the keys provided to make sure they are correct parameters
             if($commandletParameterElements[0] -like "@*") {
                 continue
@@ -305,18 +305,16 @@ function Test-AifbFunctionCommandletUsage {
         }
         
         # Check at least one parameter set is satisfied if all parameters to this commandlet have been specified by name
-        if($script:CommandletsExemptFromNamedParameters -notcontains $commandletName) {
+        if($script:CommandletsExemptFromNamedParameters -notcontains $commandletName -and $commandletName -like "*-*") {
             $parameterSetSatisfied = $false
             if($command.ParameterSets.Count -eq 0) {
                 $parameterSetSatisfied = $true
             } else {
                 foreach($parameterSet in $command.ParameterSets) {
                     $mandatoryParameters = $parameterSet.Parameters | Where-Object { $_.IsMandatory }
-                    $mandatoryParametersUsed = $mandatoryParameters | Where-Object { $commandletParameterNames -contains $_.Name }
+                    $mandatoryParametersUsed = ,($mandatoryParameters | Where-Object { $commandletParameterNames -contains $_.Name }).Name
                     if($hasPipelineInput -and ($mandatoryParameters | Where-Object { $_.ValueFromPipeline })) {
-                        $mandatoryParametersUsed += @{
-                            Name = "Pipeline Input"
-                        }
+                        $mandatoryParametersUsed += "Pipeline Input"
                     }
                     if($mandatoryParametersUsed.Count -ge $mandatoryParameters.Count) {
                         $parameterSetSatisfied = $true

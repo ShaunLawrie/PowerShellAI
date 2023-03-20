@@ -248,7 +248,7 @@ function Get-AifbSemanticFailureReason {
     )
 
     $result = $Text.Trim() -replace '(?i)NO\.?\s+', ''
-    $result = $result -replace '(?s).\s+(Here is|Here''s).+', ''
+    $result = $result -replace '(?s).\s+(Here is|Here''s|The function should be rewritten).+', ''
 
     return $result
 }

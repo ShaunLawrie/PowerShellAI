@@ -158,7 +158,7 @@ function Write-AifbFunctionOutput {
                     if($script:ShowLineNumberGutter) {
                         Write-Host -NoNewline -ForegroundColor DarkGray -BackgroundColor Black $functionLineNumber.ToString().PadRight($gutterSize)
                     }
-                    Write-Host -ForegroundColor DarkGray ($backgroundColorEscapeCode + $line + (" " * ($consoleWidth - $line.Length)))
+                    Write-Host -ForegroundColor DarkGray ($backgroundColorEscapeCode + $line + (" " * ($consoleWidth - $line.Length - 1)))
                     $currentLine += $line
                     $totalLinesRendered++
                 }
@@ -201,7 +201,7 @@ function Write-AifbFunctionOutput {
         }
 
         [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y)
-        2..($Host.UI.RawUI.WindowSize.Height - $script:FunctionTopLeft.Y - $totalLinesRendered) | Foreach-Object {
+        3..($Host.UI.RawUI.WindowSize.Height - $script:FunctionTopLeft.Y - $totalLinesRendered) | Foreach-Object {
             Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
         }
         [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y + 1)
@@ -246,9 +246,7 @@ function Write-AifbOverlay {
         [ValidateRange(1, [int]::MaxValue)]
         [int] $Column = 1
     )
-
-    $Text = $Text.Trim()
-
+    
     # Write it all to the terminal and don't overwrite on every render, this makes debugging easier
     if($VerbosePreference -ne "SilentlyContinue") {
         Write-Verbose "Overlay text for line $Line, column ${Column}: $FunctionText"
@@ -310,17 +308,7 @@ function Write-AifbOverlay {
                 # First line is special because it starts at a random point, not at the start
                 $fullTokenLine = $tokenLine
                 $endOfTextOnCurrentLine = $consoleWidth - $x + $gutterSize
-                try {
-                    $tokenLine = $tokenLine.Substring(0, $endOfTextOnCurrentLine)
-                } catch {
-                    Write-Host "FullToken: '$fullTokenLine'"
-                    Write-Host "TokenLine: '$tokenLine'"
-                    Write-Host "EndOfText: '$endOfTextOnCurrentLine'"
-                    Write-Host "ConsoleWidth: '$consoleWidth'"
-                    Write-Host "X: '$x'"
-                    Write-Host "Gutter: '$gutterSize'"
-                    throw "fuck"
-                }
+                $tokenLine = $tokenLine.Substring(0, $endOfTextOnCurrentLine)
                 $remainingText = $fullTokenLine.Substring($endOfTextOnCurrentLine, $fullTokenLine.Length - $endOfTextOnCurrentLine)
                 if($remainingText.Length -gt $consoleWidth) {
                     $overrunText += ($remainingText | Select-String "(.{1,$consoleWidth})+").Matches.Groups[1].Captures.Value

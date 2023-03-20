@@ -47,5 +47,5 @@ function Invoke-OpenAIAPI {
         $params['Headers'] = @{Authorization = "Bearer $apiKey"}
     }
 
-    Invoke-RestMethod @params
+    Invoke-RestMethodWithProgress -Params $params
 }
