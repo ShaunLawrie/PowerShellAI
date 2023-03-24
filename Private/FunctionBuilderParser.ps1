@@ -268,7 +268,7 @@ function Test-AifbFunctionCommandletUsage {
             if(![string]::IsNullOrEmpty($param)) {
                 if(!$command.Parameters.ContainsKey($param)) {
                     Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
-                    Write-AifbFunctionParsingOutput "The commandlet $commandletName does not take a parameter named $param, use another command."
+                    Write-AifbFunctionParsingOutput "The commandlet $commandletName does not take a parameter named $param."
                     return
                 }
             }

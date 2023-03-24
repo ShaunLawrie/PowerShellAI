@@ -1,14 +1,31 @@
-$script:PowerShellAI = @{
+$script:OpenAISettings = @{
     MaxTokens = 2048
-}
+    CodeWriter = @{
+        SystemPrompt = "You respond to all questions with PowerShell function code with no explanations or comments. The answer will be code only and will always be in the form of a PowerShell function."
+        Model = "gpt-3.5-turbo"
+        Temperature = 0.7
+    }
+    CodeEditor = @{
+        SystemPrompt = "You are a code editor and respond to all questions with the code provided fixed based on the requests made in the chat. If the code has no issues return the code as it is."
+        Model = "gpt-3.5-turbo"
+        Temperature = 0.0
+        Prompts = @{
+            SyntaxCorrection = @'
+Fix all of these PowerShell issues in the code below:
+{0}
 
-$script:SystemPrompts = @{
-    ScriptWriter = "You respond to all questions with PowerShell function code with no explanations or comments. The answer will be code only and will always be in the form of a PowerShell function."
-    SemanticReinforcement = "You respond to all questions with only the word YES if the PowerShell function provided meets the requirements or a corrected version of the whole PowerShell function rewritten in its entirety."
-}
-
-$script:UserPrompts = @{
-    SemanticReinforcement = @'
+```powershell
+{1}
+```
+'@
+        }
+    }
+    SemanticReinforcement = @{
+        SystemPrompt = "You respond to all questions with only the word YES if the PowerShell function provided meets the requirements or a corrected version of the whole PowerShell function rewritten in its entirety."
+        Model = "gpt-3.5-turbo"
+        Temperature = 0.0
+        Prompts = @{
+            Reinforcement = @'
 Will this PowerShell function meet the requirement: {0}?
 If it doesn't meet ALL requirements then rewrite the function so that it does and explain what was missing.
 
@@ -16,13 +33,9 @@ If it doesn't meet ALL requirements then rewrite the function so that it does an
 {1}
 ```
 '@
-    SemanticFollowUp = @'
-What would the function look like if it was fixed?
-'@
-    SyntaxCorrection = @"
-Fix all of these PowerShell issues:
-{0}
-"@
+            FollowUp = "What would the function look like if it was fixed?"
+        }
+    }
 }
 
 $script:FunctionExtractionPatterns = @(
@@ -230,7 +243,7 @@ function Test-AifbFunctionSyntax {
     $issuesToCorrect = $issuesToCorrect | Group-Object | Select-Object -ExpandProperty Name
     
     if($issuesToCorrect.Count -gt 0) {
-        return ($script:UserPrompts.SyntaxCorrection -f ($issuesToCorrect -join "`n"))
+        return ($issuesToCorrect -join "`n")
     } else {
         Write-Verbose "The script has no issues to correct"
     }
@@ -277,10 +290,15 @@ function Test-AifbFunctionSemantics {
         [string] $FunctionText
     )
 
-    New-Chat $script:SystemPrompts.SemanticReinforcement -Verbose:$false
+    New-Chat $script:OpenAISettings.SemanticReinforcement.SystemPrompt
     
-    Add-AifbLogMessage "Waiting for gpt-3.5-turbo to validate semantics for prompt '$Prompt'."
-    $response = Write-ChatResponse -Role "user" -Content ($script:UserPrompts.SemanticReinforcement -f $Prompt, $FunctionText) -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
+    Add-AifbLogMessage "Waiting for AI to validate semantics for prompt '$Prompt'."
+    $response = Write-ChatResponse -Role "user" -Content ($script:OpenAISettings.SemanticReinforcement.Prompts.Reinforcement -f $Prompt, $FunctionText) -NonInteractive `
+        -OpenAISettings @{
+            model = $script:OpenAISettings.SemanticReinforcement.Model
+            temperature = $script:OpenAISettings.SemanticReinforcement.Temperature
+            max_tokens = $script:OpenAISettings.MaxTokens
+        }
     $response = $response.Trim()
 
     if($response -match "(?i)^YES") {
@@ -297,8 +315,13 @@ function Test-AifbFunctionSemantics {
             return $response | ConvertTo-AifbFunction
         } catch {
             try {
-                Add-AifbLogMessage -Level "WRN" -Message "Following up with ChatGPT because it didn't return any code."
-                $response = Write-ChatResponse -Role "user" -Content $script:UserPrompts.SemanticFollowUp -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive
+                Add-AifbLogMessage -Level "WRN" -Message "Following up with the AI because it didn't return any code."
+                $response = Write-ChatResponse -Role "user" -Content $script:OpenAISettings.SemanticReinforcement.Prompts.FollowUp -NonInteractive `
+                    -OpenAISettings @{
+                        model = $script:OpenAISettings.SemanticReinforcement.Model
+                        temperature = $script:OpenAISettings.SemanticReinforcement.Temperature
+                        max_tokens = $script:OpenAISettings.MaxTokens
+                    }
                 return $response | ConvertTo-AifbFunction
             } catch {
                 Write-AifbChat
@@ -319,10 +342,15 @@ function Initialize-AifbFunction {
     )
 
     Write-Verbose "Getting initial powershell function with prompt '$Prompt'"
-    Add-AifbLogMessage -NoRender "Waiting for code-davinci-001 to correct syntax issues."
+    Add-AifbLogMessage -NoRender "Waiting for AI to correct syntax issues."
 
-    New-Chat $script:SystemPrompts.ScriptWriter -Verbose:$false
-    return Write-ChatResponse -Role "user" -Content $Prompt -max_tokens $script:PowerShellAI.MaxTokens -NonInteractive | ConvertTo-AifbFunction
+    New-Chat $script:OpenAISettings.CodeWriter.SystemPrompt -Verbose:$false
+    return Write-ChatResponse -Role "user" -Content $Prompt -NonInteractive `
+        -OpenAISettings @{
+            model = $script:OpenAISettings.CodeWriter.Model
+            temperature = $script:OpenAISettings.CodeWriter.Temperature
+            max_tokens = $script:OpenAISettings.MaxTokens
+        } | ConvertTo-AifbFunction
 }
 
 function Optimize-AifbFunction {
@@ -349,12 +377,17 @@ function Optimize-AifbFunction {
             Write-Error "A valid function was not able to generated in $MaximumReinforcementIterations iterations, try again with a higher -MaximumReinforcementIterations value or rethink the initial prompt to be more explicit" -ErrorAction "Stop"
         }
         
-        $correctionPrompt = Test-AifbFunctionSyntax -FunctionText $Function.Body -FunctionName $Function.Name
+        $corrections = Test-AifbFunctionSyntax -FunctionText $Function.Body -FunctionName $Function.Name
         
-        if($correctionPrompt -or ($Force -and $iteration -eq 1)) {
-            Add-AifbLogMessage "Waiting for code-davinci-001 to correct syntax issues."
-            $Function = (Get-OpenAIEdit -InputText $Function.Body -Instruction $correctionPrompt).text | ConvertTo-AifbFunction
-            Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
+        if($corrections -or ($Force -and $iteration -eq 1)) {
+            Add-AifbLogMessage "Waiting for AI to correct syntax issues."
+            New-Chat $script:OpenAISettings.CodeEditor.SystemPrompt -Verbose:$false
+            $Function = Write-ChatResponse -Role "user" -Content ($script:OpenAISettings.CodeEditor.Prompts.SyntaxCorrection -f $corrections, $Function.Body) -NonInteractive `
+                -OpenAISettings @{
+                    model = $script:OpenAISettings.CodeEditor.Model
+                    temperature = $script:OpenAISettings.CodeEditor.Temperature
+                    max_tokens = $script:OpenAISettings.MaxTokens
+                } | ConvertTo-AifbFunction
 
             $Function = Test-AifbFunctionSemantics -FunctionText $Function.Body -Prompt $Prompt
             Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt

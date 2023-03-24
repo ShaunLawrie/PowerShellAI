@@ -190,13 +190,13 @@ function Write-ChatResponse {
         $Role,
         [Parameter(Mandatory)]
         $Content,
-        $max_tokens = 256,
+        $OpenAISettings = @{},
         [switch] $NonInteractive
     )
  
     New-ChatMessage -Role $Role -Content $Content
 
-    $body = Get-OpenAIChatPayload -max_tokens $max_tokens
+    $body = Get-OpenAIChatPayload @OpenAISettings
     $result = Invoke-OpenAIAPI -Uri (Get-OpenAIChatCompletionUri) -Method 'Post' -Body $body
 
     if (!$ExcludeResponseFromBeingSaved) {    
