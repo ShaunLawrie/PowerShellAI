@@ -8,7 +8,7 @@ $script:OpenAISettings = @{
     CodeEditor = @{
         SystemPrompt = "You are a code editor and respond to all questions with the code provided fixed based on the requests made in the chat. If the code has no issues return the code as it is."
         Model = "gpt-3.5-turbo"
-        Temperature = 0.0
+        Temperature = 0.3
         Prompts = @{
             SyntaxCorrection = @'
 Fix all of these PowerShell issues in the code below:
@@ -40,7 +40,7 @@ If it doesn't meet ALL requirements then rewrite the function so that it does an
 
 $script:FunctionExtractionPatterns = @(
     @{
-        Regex = '(?s)(function\s+([a-z0-9\-]+)\s+\{.+})'
+        Regex = '(?s)(function\s+([a-z0-9\-]+)\s*\{.+})'
         FunctionNameGroup = 2
         FunctionBodyGroup = 1
     }
@@ -54,12 +54,13 @@ function Get-AifbUserAction {
 
     $actions = @(
         New-Object System.Management.Automation.Host.ChoiceDescription '&Save', 'Save this function to your local filesystem'
-        New-Object System.Management.Automation.Host.ChoiceDescription '&Run', 'Save this function to your local filesystem and load it into this PowerShell session'
+        New-Object System.Management.Automation.Host.ChoiceDescription '&Run', 'Save this function to a temporary location on your local filesystem and load it into this PowerShell session to be run'
         New-Object System.Management.Automation.Host.ChoiceDescription '&Edit', 'Request changes to this function'
+        New-Object System.Management.Automation.Host.ChoiceDescription 'E&xplain', 'Explain why this function works'
         New-Object System.Management.Automation.Host.ChoiceDescription '&Quit', 'Exit AIFunctionBuilder'
     )
 
-    $response = $Host.UI.PromptForChoice($null, "What do you want to do?", $actions, 3)
+    $response = $Host.UI.PromptForChoice($null, "What do you want to do?", $actions, 4)
 
     return $actions[$response].Label -replace '&', ''
 }
@@ -73,7 +74,9 @@ function Save-AifbFunctionOutput {
         # The name of the function to be tested
         [string] $FunctionName,
         # A function in a text format to be formatted
-        [string] $FunctionText
+        [string] $FunctionText,
+        # The prompt used to create the function
+        [string] $Prompt
     )
 
     $suggestedFilename = "$FunctionName.psm1"
@@ -99,7 +102,7 @@ function Save-AifbFunctionOutput {
         if(Test-Path $finalDestination) {
             Write-Error "There is already a file at '$finalDestination'"
         } else {
-            Set-Content -Path $finalDestination -Value $FunctionText
+            Set-Content -Path $finalDestination -Value "<#`n$Prompt`n#>`n`n$FunctionText"
             Write-Output $finalDestination
             break
         }
@@ -346,7 +349,7 @@ function Initialize-AifbFunction {
     )
 
     Write-Verbose "Getting initial powershell function with prompt '$Prompt'"
-    Add-AifbLogMessage -NoRender "Waiting for AI to correct syntax issues."
+    Add-AifbLogMessage -NoRender "Built initial function version."
 
     New-Chat $script:OpenAISettings.CodeWriter.SystemPrompt -Verbose:$false
     return Write-ChatResponse -Role "user" -Content $Prompt -NonInteractive `
@@ -370,6 +373,8 @@ function Optimize-AifbFunction {
         [hashtable] $Function,
         # The maximum number of times to loop before giving up
         [int] $MaximumReinforcementIterations = 15,
+        # A runtime error the function needs to fix
+        [string] $RuntimeError,
         # Force semantic re-evaluation
         [switch] $Force
     )
@@ -382,10 +387,15 @@ function Optimize-AifbFunction {
         }
         
         $corrections = Test-AifbFunctionSyntax -FunctionText $Function.Body -FunctionName $Function.Name
+
+        if($RuntimeError) {
+            Add-AifbLogMessage -Level "ERR" -Message $RuntimeError
+            $corrections = @($corrections, " - $RuntimeError") -join "`n"
+            $RuntimeError = $null
+        }
         
         if($corrections -or ($Force -and $iteration -eq 1)) {
             if($corrections) {
-                Add-AifbLogMessage "Waiting for AI to correct syntax issues."
                 New-Chat $script:OpenAISettings.CodeEditor.SystemPrompt -Verbose:$false
                 $Function = Write-ChatResponse -Role "user" -Content ($script:OpenAISettings.CodeEditor.Prompts.SyntaxCorrection -f $corrections, $Function.Body) -NonInteractive `
                     -OpenAISettings @{
@@ -393,6 +403,7 @@ function Optimize-AifbFunction {
                         temperature = $script:OpenAISettings.CodeEditor.Temperature
                         max_tokens = $script:OpenAISettings.MaxTokens
                     } | ConvertTo-AifbFunction
+                Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
             }
 
             $Function = Test-AifbFunctionSemantics -FunctionText $Function.Body -Prompt $Prompt

@@ -2,7 +2,8 @@
 $script:ScriptAnalyzerAvailable = $null
 # List of PSScriptAnalyzer rules to ignore when validating functions
 $script:ScriptAnalyserIgnoredRules = @(
-    "PSReviewUnusedParameter"
+    "PSReviewUnusedParameter",
+    "PSAvoidUsingWriteHost"
 )
 # ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
@@ -53,7 +54,7 @@ function Test-AifbScriptAnalyzerAvailable {
         if(Get-Module "PSScriptAnalyzer" -ListAvailable -Verbose:$false) {
             $script:ScriptAnalyzerAvailable = $true
         } else {
-            Add-AifbLogMessage -Level "WRN" -Message "This module performs better if you have PSScriptAnalyzer installed"
+            Add-AifbLogMessage -Level "WRN" -Message "This module performs better if you have PSScriptAnalyzer installed" -NoRender
             $script:ScriptAnalyzerAvailable = $false
         }
     }

@@ -70,7 +70,8 @@ function Invoke-RestMethodWithProgress {
     } catch {
         throw $_
     } finally {
-        [Console]::CursorVisible = $false
+        [Console]::CursorVisible = $true
+        Write-Progress -Id 123 -Activity "Invoking AI" -Completed -ErrorAction "SilentlyContinue"
         Stop-Job $job -ErrorAction "SilentlyContinue"
         Remove-Job $job -Force -ErrorAction "SilentlyContinue"
     }

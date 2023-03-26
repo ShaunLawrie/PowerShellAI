@@ -1,0 +1,5 @@
+given a width and a height draw the outline of an oval in the terminal
+
+find all sites in IIS, restart them and tell the user the amount of memory difference between the start of the function and when all sites have been restarted for all of the w3wp processes
+
+make up a fake function as a string and parse it's abstract syntax tree echoing all commands being used in the fake function

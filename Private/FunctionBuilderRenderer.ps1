@@ -14,18 +14,26 @@ $script:FunctionVersion = 1
 $script:FunctionLines = @()
 $script:ShowLineNumberGutter = $true
 $script:LineNumberGutterSize = 0
+$script:InitialPrePrompt
+$script:InitialPrompt
 
 function Initialize-AifbRenderer {
     <#
         .SYNOPSIS
             Setup the function renderer at the current cursor position, this will be considered the top left of the function for each draw
     #>
+    param (
+        [string] $InitialPrePrompt,
+        [string] $InitialPrompt
+    )
     $currentPosition = $Host.UI.RawUI.CursorPosition
     $script:BufferScrollPosition = $Host.UI.RawUI.BufferSize.Height
     $script:FunctionTopLeft.X = $currentPosition.X
     $script:FunctionTopLeft.Y = $currentPosition.Y + 1
     $script:LogMessages = [System.Collections.Queue]::new()
     $script:FunctionVersion = 0
+    $script:InitialPrePrompt = $InitialPrePrompt
+    $script:InitialPrompt = $InitialPrompt
 }
 
 function Write-AifbFunctionParsingOutput {
@@ -126,6 +134,16 @@ function Write-AifbFunctionOutput {
     $consoleWidth = $Host.UI.RawUI.WindowSize.Width - $gutterSize
 
     try {
+        [Console]::SetCursorPosition(0, 0)
+        if($script:InitialPrePrompt) {
+            Write-Host -ForegroundColor Cyan -NoNewline "$($script:InitialPrePrompt): "
+            Write-Host ($script:InitialPrompt + (" " * ($consoleWidth - $script:InitialPrePrompt.Length + $script:InitialPrompt.Length + 2)))
+        } else {
+            Write-Host ($script:InitialPrompt + (" " * ($consoleWidth - $script:InitialPrompt.Length)))
+        }
+        
+        Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
+
         # Put the cursor position at the top left of the function
         [Console]::CursorVisible = $false
         [Console]::SetCursorPosition($script:FunctionTopLeft.X, $script:FunctionTopLeft.Y)
@@ -158,7 +176,7 @@ function Write-AifbFunctionOutput {
                     if($script:ShowLineNumberGutter) {
                         Write-Host -NoNewline -ForegroundColor DarkGray -BackgroundColor Black $functionLineNumber.ToString().PadRight($gutterSize)
                     }
-                    Write-Host -ForegroundColor DarkGray ($backgroundColorEscapeCode + $line + (" " * ($consoleWidth - $line.Length - 1)))
+                    Write-Host -ForegroundColor DarkGray ($backgroundColorEscapeCode + $line + (" " * ($consoleWidth - $line.Length)))
                     $currentLine += $line
                     $totalLinesRendered++
                 }

@@ -32,7 +32,7 @@ function Invoke-AIFunctionBuilder {
 
     $function = Initialize-AifbFunction -Prompt $fullPrompt
 
-    Initialize-AifbRenderer
+    Initialize-AifbRenderer -InitialPrePrompt $prePrompt -InitialPrompt $Prompt
     Write-AifbFunctionOutput -FunctionText $function.Body -Prompt $fullPrompt
 
     $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt
@@ -49,10 +49,16 @@ function Invoke-AIFunctionBuilder {
                 Write-Host -ForegroundColor Cyan -NoNewline "${editPrePrompt}: "
                 $editPrompt = Read-Host
                 Write-Verbose "Re-running function optimizer with a request to edit functionality: '$editPrompt'"
+                $fullPrompt = (@($fullPrompt, $editPrompt) | Where-Object { ![string]::IsNullOrWhiteSpace($_) }) -join '. The function must '
                 Write-AifbFunctionOutput -FunctionText $function.Body -Prompt $fullPrompt
-                $fullPrompt = (@($fullPrompt, $editPrompt) | Where-Object { $null -ne $_ }) -join ' AND '
                 $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt -Force
                 Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
+            }
+            "Explain" {
+                $explanation = (Get-GPT3Completion "Explain how the function below meets all of the requirements the following requirements, list the requirements and how they're met`nRequirements: $fullPrompt`n`n``````powershell`n$($function.Body)``````" -max_tokens 2000).Trim()
+                Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
+                Write-Host $explanation
+                Write-Host ""
             }
             "Run" {
                 $tempFile = New-TemporaryFile
@@ -61,10 +67,30 @@ function Invoke-AIFunctionBuilder {
                 Move-Item -Path $tempFile.FullName -Destination $tempFilePsm1
                 Write-Host "Importing function '$($function.Name)'"
                 Import-Module $tempFilePsm1 -Global
-                & $function.Name
+                $command = (Get-Command $function.Name)
+                $params = @{}
+                $command.ParameterSets.GetEnumerator()[0].Parameters | Where-Object { $_.Position -ge 0 } | Foreach-Object { $params[$_.Name] = Read-Host "$($_.Name) ($($_.ParameterType))" }
+                $previousErrorActionPreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = "Stop"
+                    & $function.Name @params
+                    Get-Module | Where-Object { $_.Path -eq $tempFilePsm1 } | Remove-Module
+                } catch {
+                    Get-Module | Where-Object { $_.Path -eq $tempFilePsm1 } | Remove-Module
+                    Write-Error $_
+                    $answer = Read-Host -Prompt "An error occurred, do you want to try auto-fix the function? (y/n)"
+                    if($answer -eq "y") {
+                        Write-AifbFunctionOutput -FunctionText $function.Body -Prompt $fullPrompt
+                        $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt -RuntimeError "$($_.Exception.Message) The error occured on '$($_.InvocationInfo.Line.Trim())'"
+                        Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
+                    }
+                }
+                $ErrorActionPreference = $previousErrorActionPreference
             }
             "Save" {
-                Save-AifbFunctionOutput -FunctionText $function.Body -FunctionName $function.Name
+                $moduleLocation = Save-AifbFunctionOutput -FunctionText $function.Body -FunctionName $function.Name -Prompt $fullPrompt
+                Import-Module $moduleLocation -Global
+                Write-Host "The function is available as '$($function.Name)' in your current terminal session. To import this function in the future use 'Import-Module $moduleLocation' or add the directory with all your PowerShellAI modules to your `$env:PSModulePath to have them auto import for every session."
                 $finished = $true
             }
             "Quit" {
