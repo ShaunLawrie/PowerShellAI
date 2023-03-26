@@ -37,7 +37,7 @@ function Write-AifbFunctionParsingOutput {
         # The message to log and format
         [string] $Message
     )
-    Add-AifbLogMessage -Level "WRN" -Message $Message
+    Add-AifbLogMessage -Level "ERR" -Message $Message
     Write-Output " - $Message"
 }
 

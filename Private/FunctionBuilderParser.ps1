@@ -83,7 +83,7 @@ function Write-AifbScriptAnalyzerOutput {
         $brokenLineErrors = $firstBrokenLine.Group.Message
         $ruleNames = $firstBrokenLine.Group.RuleName
 
-        Write-AifbOverlay -Line ($firstBrokenLine.Name) -Text $($FunctionText.Split("`n")[$firstBrokenLine.Name - 1]) -ForegroundColor "Yellow"
+        Write-AifbOverlay -Line ($firstBrokenLine.Name) -Text $($FunctionText.Split("`n")[$firstBrokenLine.Name - 1]) -ForegroundColor "Red"
 
         # Write the first custom error message that matches and violated PSScriptAnalyzer rules
         foreach($ruleResponse in $script:ScriptAnalyserCustomRuleResponses.GetEnumerator()) {
@@ -173,13 +173,13 @@ function Test-AifbFunctionParsing {
     )
 
     if(Get-Command $FunctionName -ErrorAction "SilentlyContinue") {
-        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Yellow"
+        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Red"
         Write-AifbFunctionParsingOutput "The name of the function is reserved, rename the function to not collide with common function names$(Get-AifbUnavailableFunctionNames)."
         $script:UnavailableCommandletNames += $FunctionName
     }
 
     if($FunctionName -notlike "*-*") {
-        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Yellow"
+        Write-AifbOverlay -Line 1 -Text ($FunctionText.Split("`n")[0]) -ForegroundColor "Red"
         Write-AifbFunctionParsingOutput "The name of the function should follow the PowerShell format of Verb-Noun$(Get-AifbUnavailableFunctionNames)."
     }
 
@@ -257,7 +257,7 @@ function Test-AifbFunctionCommandletUsage {
         }
 
         if($null -eq $command) {
-            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
             Write-AifbFunctionParsingOutput "The commandlet $commandletName cannot be found, use a different command or write your own implementation$(Get-AifbUnavailableFunctionNames)."
             $script:UnavailableCommandletNames += $commandletName
             return
@@ -267,7 +267,7 @@ function Test-AifbFunctionCommandletUsage {
         foreach($param in $commandletParameterNames) {
             if(![string]::IsNullOrEmpty($param)) {
                 if(!$command.Parameters.ContainsKey($param)) {
-                    Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                    Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
                     Write-AifbFunctionParsingOutput "The commandlet $commandletName does not take a parameter named $param."
                     return
                 }
@@ -287,7 +287,7 @@ function Test-AifbFunctionCommandletUsage {
                     $previousElementWasParameterName = $true
                 } else {
                     if(!$previousElementWasParameterName) {
-                        Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                        Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
                         Write-AifbFunctionParsingOutput "Use a named parameter when passing $element to $commandletName."
                         return
                     }
@@ -299,7 +299,7 @@ function Test-AifbFunctionCommandletUsage {
         # Check named parameters haven't been specified more than once
         $duplicateParameters = $commandletParameterNames | Group-Object | Where-Object { $_.Count -gt 1 } 
         foreach($duplicateParameter in $duplicateParameters) {
-            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
             Write-AifbFunctionParsingOutput "The parameter $($duplicateParameter.Name) cannot be provided more than once to $commandletName."
             return
         }
@@ -323,10 +323,71 @@ function Test-AifbFunctionCommandletUsage {
                 }
             }
             if(!$parameterSetSatisfied) {
-                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Yellow"
+                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
                 Write-AifbFunctionParsingOutput "Parameter set cannot be resolved using the specified named parameters for $commandletName."
                 return
             }
+        }
+    }
+}
+
+function Test-AifbFunctionStaticMethodUsage {
+    <#
+        .SYNOPSIS
+            This function tests the usage .net class static methods.
+
+        .PARAMETER FunctionText
+            Specifies the text content of the PowerShell script to be tested.
+
+        .NOTES
+            This could likely be converted to a set of PSScriptAnalyzer custom rules https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/create-custom-rule?view=ps-modules
+    #>
+    param (
+        # A function in a text format to be tested
+        [string] $FunctionText
+    )
+
+    $scriptAst = [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$null, [ref]$null)
+
+    $methodCalls = $scriptAst.FindAll({$args[0].Static -eq $true}, $true)
+
+    # Validate each commandlet and return on the first error found because telling the LLM about too many errors at once results in unpredictable fixes
+    foreach($methodCall in $methodCalls) {
+        $className = $methodCall.Expression.TypeName.FullName
+        $methodName = $methodCall.Member.Value
+        $arguments = $methodCall.Arguments
+        $extent = $methodCall.Extent
+        
+        $instance = Invoke-Expression "[$className]"
+        $instanceMethods = $instance | Get-Member -Type Method -Static | Where-Object { $_.Name -eq $methodName }
+
+        if(!$instance) {
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+            Write-AifbFunctionParsingOutput "The class $className doesn't exist."
+            return
+        }
+        
+        if(!$instanceMethods) {
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+            Write-AifbFunctionParsingOutput "The method $methodName doesn't exist on $className."
+            return
+        }
+
+        $methodDefinitions = $instanceMethods.Definition -split "static [a-z\.]+ " | Where-Object { ![string]::IsNullOrWhiteSpace($_) }
+        $foundMethodDefinitionThatHasCorrectArgNumber = $false
+        foreach($methodDefinition in $methodDefinitions) {
+            $possibleMethodArgs = ($methodDefinition | Select-String "\((.+)\)").Matches.Groups[1].Value
+            $possibleMethodArgs = $possibleMethodArgs -split "," | ForEach-Object { $_.Trim() }
+            if($arguments.Count -eq $possibleMethodArgs.Count) {
+                Write-Verbose "Found a static method that takes the correct number of arguments"
+                $foundMethodDefinitionThatHasCorrectArgNumber = $true
+                break
+            }
+        }
+        if(!$foundMethodDefinitionThatHasCorrectArgNumber) {
+            Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+            Write-AifbFunctionParsingOutput "The method $methodName doesn't take $($arguments.Count) arguments."
+            return
         }
     }
 }

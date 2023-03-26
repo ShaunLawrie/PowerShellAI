@@ -20,8 +20,6 @@ function Invoke-AIFunctionBuilder {
         [int] $MaximumReinforcementIterations = 15
     )
 
-    $ErrorActionPreference = "SilentlyContinue"
-
     Clear-Host
 
     $prePrompt = $null
@@ -51,6 +49,7 @@ function Invoke-AIFunctionBuilder {
                 Write-Host -ForegroundColor Cyan -NoNewline "${editPrePrompt}: "
                 $editPrompt = Read-Host
                 Write-Verbose "Re-running function optimizer with a request to edit functionality: '$editPrompt'"
+                Write-AifbFunctionOutput -FunctionText $function.Body -Prompt $fullPrompt
                 $fullPrompt = (@($fullPrompt, $editPrompt) | Where-Object { $null -ne $_ }) -join ' AND '
                 $function = Optimize-AifbFunction -Function $function -Prompt $fullPrompt -Force
                 Write-AifbFunctionOutput -FunctionText $function.Body -SyntaxHighlight -NoLogMessages -Prompt $fullPrompt
@@ -61,8 +60,8 @@ function Invoke-AIFunctionBuilder {
                 Set-Content -Path $tempFile -Value $function.Body
                 Move-Item -Path $tempFile.FullName -Destination $tempFilePsm1
                 Write-Host "Importing function '$($function.Name)'"
-                Import-Module $tempFilePsm1 -Global -Verbose
-                $finished = $true
+                Import-Module $tempFilePsm1 -Global
+                & $function.Name
             }
             "Save" {
                 Save-AifbFunctionOutput -FunctionText $function.Body -FunctionName $function.Name

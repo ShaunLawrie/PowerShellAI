@@ -236,7 +236,12 @@ function Test-AifbFunctionSyntax {
 
     # Only check commandlet usage if there are no syntax errors
     if($issuesToCorrect.Count -eq 0) {
-        $issuesToCorrect += Test-AifbFunctionCommandletUsage -FunctionText $FunctionText
+        $issuesToCorrect += Test-AifbFunctionCommandletUsage -FunctionName $FunctionName -FunctionText $FunctionText
+    }
+
+    # Only check static function usage if there are no syntax errors
+    if($issuesToCorrect.Count -eq 0) {
+        $issuesToCorrect += Test-AifbFunctionStaticMethodUsage -FunctionText $FunctionText
     }
 
     # Deduplicate issues
@@ -310,7 +315,6 @@ function Test-AifbFunctionSemantics {
         } catch {
             Add-AifbLogMessage -Level "ERR" -Message "The function doesn't meet the original intent of the prompt."
         }
-        Start-Sleep -Seconds 10
         try {
             return $response | ConvertTo-AifbFunction
         } catch {
@@ -380,14 +384,16 @@ function Optimize-AifbFunction {
         $corrections = Test-AifbFunctionSyntax -FunctionText $Function.Body -FunctionName $Function.Name
         
         if($corrections -or ($Force -and $iteration -eq 1)) {
-            Add-AifbLogMessage "Waiting for AI to correct syntax issues."
-            New-Chat $script:OpenAISettings.CodeEditor.SystemPrompt -Verbose:$false
-            $Function = Write-ChatResponse -Role "user" -Content ($script:OpenAISettings.CodeEditor.Prompts.SyntaxCorrection -f $corrections, $Function.Body) -NonInteractive `
-                -OpenAISettings @{
-                    model = $script:OpenAISettings.CodeEditor.Model
-                    temperature = $script:OpenAISettings.CodeEditor.Temperature
-                    max_tokens = $script:OpenAISettings.MaxTokens
-                } | ConvertTo-AifbFunction
+            if($corrections) {
+                Add-AifbLogMessage "Waiting for AI to correct syntax issues."
+                New-Chat $script:OpenAISettings.CodeEditor.SystemPrompt -Verbose:$false
+                $Function = Write-ChatResponse -Role "user" -Content ($script:OpenAISettings.CodeEditor.Prompts.SyntaxCorrection -f $corrections, $Function.Body) -NonInteractive `
+                    -OpenAISettings @{
+                        model = $script:OpenAISettings.CodeEditor.Model
+                        temperature = $script:OpenAISettings.CodeEditor.Temperature
+                        max_tokens = $script:OpenAISettings.MaxTokens
+                    } | ConvertTo-AifbFunction
+            }
 
             $Function = Test-AifbFunctionSemantics -FunctionText $Function.Body -Prompt $Prompt
             Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
