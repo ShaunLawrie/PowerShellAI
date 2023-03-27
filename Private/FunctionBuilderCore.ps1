@@ -1,7 +1,8 @@
 $script:OpenAISettings = @{
     MaxTokens = 2048
     CodeWriter = @{
-        SystemPrompt = "You respond to all questions with PowerShell function code with no explanations or comments. The answer will be code only and will always be in the form of a PowerShell function."
+        SystemPrompt = "You respond to all questions with PowerShell function code with no explanations or comments. The answer will be code only and will always be in the form of a PowerShell function. Valid PowerShell functions always start with a verb prefix like Add, Clear, Close, Copy, Enter, Exit, Find, Format, Get, Hide, Join, Lock, Move, New, Open, Optimize, Push, Pop, Redo, Remove, Rename, Reset, Resize, Search, Select, Set, Show, Skip, Split,
+        Step, Switch, Undo, Unlock or Watch."
         Model = "gpt-3.5-turbo"
         Temperature = 0.7
     }
@@ -157,7 +158,8 @@ function ConvertTo-AifbFunction {
     param (
         # Some text that contains a function name and body to extract
         [Parameter(ValueFromPipeline = $true)]
-        [string] $Text
+        [string] $Text,
+        [string] $FallbackText
     )
     process {
         foreach($pattern in $script:FunctionExtractionPatterns) {
@@ -169,7 +171,12 @@ function ConvertTo-AifbFunction {
             }
         }
         
-        Write-Error "There is no function in this PowerShell code block: $Text" -ErrorAction "Stop"
+        if($FallbackText) {
+            Add-AifbLogMessage -Level "WRN" -Message "There is no function in this PowerShell code block: $Text"
+            return $FallbackText
+        } else {
+            Write-Error "There is no function in this PowerShell code block: $Text" -ErrorAction "Stop"
+        }
     }
 }
 
@@ -402,7 +409,7 @@ function Optimize-AifbFunction {
                         model = $script:OpenAISettings.CodeEditor.Model
                         temperature = $script:OpenAISettings.CodeEditor.Temperature
                         max_tokens = $script:OpenAISettings.MaxTokens
-                    } | ConvertTo-AifbFunction
+                    } | ConvertTo-AifbFunction -FallbackText $Function.Body
                 Write-AifbFunctionOutput -FunctionText $Function.Body -Prompt $Prompt
             }
 

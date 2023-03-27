@@ -58,7 +58,7 @@ function Invoke-RestMethodWithProgress {
                 $status = "API is taking longer than expected"
             }
             Write-Progress -Id 123 -Activity "Invoking AI" -Status $status -PercentComplete $logPercent
-            Start-Sleep -Milliseconds 50
+            Start-Sleep -Milliseconds 100
         }
         Write-Progress -Id 123 -Activity "Invoking AI" -Completed
 

@@ -24,7 +24,8 @@ function Invoke-AIFunctionBuilder {
 
     $prePrompt = $null
     if([string]::IsNullOrEmpty($Prompt)) {
-        $prePrompt = "Write a PowerShell function that will"
+        $version = if($PSVersionTable.PSVersion.Major -gt 5) { "core" } else { $PSVersionTable.PSVersion.Major }
+        $prePrompt = "Write a PowerShell $version function that will"
         Write-Host -ForegroundColor Cyan -NoNewline "${prePrompt}: "
         $Prompt = Read-Host
     }

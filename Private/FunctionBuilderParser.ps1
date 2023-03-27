@@ -3,13 +3,14 @@ $script:ScriptAnalyzerAvailable = $null
 # List of PSScriptAnalyzer rules to ignore when validating functions
 $script:ScriptAnalyserIgnoredRules = @(
     "PSReviewUnusedParameter",
-    "PSAvoidUsingWriteHost"
+    "PSAvoidUsingWriteHost",
+    "PSUseShouldProcessForStateChangingFunctions"
 )
 # ScriptAnalyzer rules to return custom error messages for rule names that match the keys of the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomRuleResponses = @{
     "PSAvoidOverwritingBuiltInCmdlets" = { "The name of the function is reserved, rename the function to not collide with internal PowerShell commandlets." }
     "PSUseApprovedVerbs" = { "The function name has to start with a valid PowerShell verb like $((Get-Verb | Where-Object { $_.Group -eq 'Common' } | Select-Object -ExpandProperty Verb) -join ', ')." }
-    "*ShouldProcess*" = { "The function has to have the CmdletBinding SupportsShouldProcess and use a process block where ShouldProcess is checked inside foreach loops." }
+    "*ShouldProcess*" = { "The function has to have the CmdletBinding SupportsShouldProcess and use a process block." }
 }
 # ScriptAnalyzer custom error messages for messages matching keys in the hashtable because the default errors trip up LLM models
 $script:ScriptAnalyserCustomMessageResponses = @{
@@ -329,6 +330,50 @@ function Test-AifbFunctionCommandletUsage {
                 return
             }
         }
+
+        # Check if types are real
+        if("Add-Type" -eq $commandletName) {
+            $commandletParameterElementsText = $commandletParameterElements.Extent.Text
+            $typeNameIndex = $commandletParameterElementsText.IndexOf('-AssemblyName') + 1
+            if($typeNameIndex -gt 0 -and $commandletParameterElementsText.Count -gt $typeNameIndex) {
+                $typeName = $commandletParameterElements.Extent.Text[$typeNameIndex]
+                Write-Verbose "Checking type '$typeName' exists for Add-Type"
+                $typeSections = $typeName -split "\."
+                for($i = ($typeSections.Length - 1); $i -ge 0; $i--) {
+                    $assembly = $typeSections[0..$i] -join "."
+                    try {
+                        Add-Type -AssemblyName $assembly -ErrorAction Stop
+                        return
+                    } catch {
+                        Add-AifbLogMessage -Level "WRN" -Message "Failed to Add-Type '$assembly'."
+                    }
+                }
+                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+                Write-AifbFunctionParsingOutput "Failed to Add-Type '$typeName'."
+                return
+            }
+        }
+        if("New-Object" -eq $commandletName) {
+            $commandletParameterElementsText = $commandletParameterElements.Extent.Text
+            $typeNameIndex = $commandletParameterElementsText.IndexOf('-TypeName') + 1
+            if($typeNameIndex -gt 0 -and $commandletParameterElementsText.Count -gt $typeNameIndex) {
+                $typeName = $commandletParameterElements.Extent.Text[$typeNameIndex]
+                Write-Verbose "Checking type '$typeName' exists for New-Object"
+                $typeSections = $typeName -split "\."
+                for($i = ($typeSections.Length - 1); $i -ge 0; $i--) {
+                    $assembly = $typeSections[0..$i] -join "."
+                    try {
+                        Add-Type -AssemblyName $assembly -ErrorAction Stop
+                        return
+                    } catch {
+                        Add-AifbLogMessage -Level "WRN" -Message "Failed to Add-Type '$assembly'."
+                    }
+                }
+                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+                Write-AifbFunctionParsingOutput "Failed to Add-Type '$typeName'."
+                return
+            }
+        }
     }
 }
 
@@ -350,17 +395,17 @@ function Test-AifbFunctionStaticMethodUsage {
 
     $scriptAst = [System.Management.Automation.Language.Parser]::ParseInput($FunctionText, [ref]$null, [ref]$null)
 
-    $methodCalls = $scriptAst.FindAll({$args[0].Static -eq $true}, $true)
+    $staticMemberCalls = $scriptAst.FindAll({$args[0].Static -eq $true}, $true)
 
     # Validate each commandlet and return on the first error found because telling the LLM about too many errors at once results in unpredictable fixes
-    foreach($methodCall in $methodCalls) {
-        $className = $methodCall.Expression.TypeName.FullName
-        $methodName = $methodCall.Member.Value
-        $arguments = $methodCall.Arguments
-        $extent = $methodCall.Extent
+    foreach($memberCall in $staticMemberCalls) {
+        $className = $memberCall.Expression.TypeName.FullName
+        $memberName = $memberCall.Member.Value
+        $arguments = $memberCall.Arguments
+        $extent = $memberCall.Extent
         
         $instance = Invoke-Expression "[$className]"
-        $instanceMethods = $instance | Get-Member -Type Method -Static | Where-Object { $_.Name -eq $methodName }
+        $instanceMembers = $instance | Get-Member -Static -ErrorAction "SilentlyContinue" | Where-Object { $_.Name -eq $memberName }
 
         if(!$instance) {
             Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
@@ -368,17 +413,35 @@ function Test-AifbFunctionStaticMethodUsage {
             return
         }
         
-        if(!$instanceMethods) {
+        if(!$instanceMembers) {
             Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
-            Write-AifbFunctionParsingOutput "The method $methodName doesn't exist on $className."
+            Write-AifbFunctionParsingOutput "The member $memberName doesn't exist on $className."
             return
         }
 
-        $methodDefinitions = $instanceMethods.Definition -split "static [a-z\.]+ " | Where-Object { ![string]::IsNullOrWhiteSpace($_) }
+        if($instanceMembers[0].MemberType -eq "Property") {
+            Write-Verbose "Member is a property"
+            return
+        }
+
+        if($memberName -eq "new") {
+            $constructorArgCounts = ($instance.GetConstructors() | Foreach-Object { $_.GetParameters().Count } | Group-Object).Name
+            if($constructorArgCounts -notcontains $arguments.Count) {
+                Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
+                Write-AifbFunctionParsingOutput "There is no constructor for $className that takes $($arguments.Count) parameters."
+                return
+            }
+        }
+
+        $methods = $instanceMembers | Where-Object { $_.MemberType -eq "Method" }
+        $methodDefinitions = $methods.Definition -split "static [a-z\.]+ " | Where-Object { ![string]::IsNullOrWhiteSpace($_) }
         $foundMethodDefinitionThatHasCorrectArgNumber = $false
         foreach($methodDefinition in $methodDefinitions) {
-            $possibleMethodArgs = ($methodDefinition | Select-String "\((.+)\)").Matches.Groups[1].Value
-            $possibleMethodArgs = $possibleMethodArgs -split "," | ForEach-Object { $_.Trim() }
+            $possibleMethodArgs = @()
+            if($methodDefinition -notlike "*()*") {
+                $possibleMethodArgs = ($methodDefinition | Select-String "\((.+)\)").Matches.Groups[1].Value
+                $possibleMethodArgs = $possibleMethodArgs -split "," | ForEach-Object { $_.Trim() }
+            }
             if($arguments.Count -eq $possibleMethodArgs.Count) {
                 Write-Verbose "Found a static method that takes the correct number of arguments"
                 $foundMethodDefinitionThatHasCorrectArgNumber = $true
@@ -387,7 +450,7 @@ function Test-AifbFunctionStaticMethodUsage {
         }
         if(!$foundMethodDefinitionThatHasCorrectArgNumber) {
             Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
-            Write-AifbFunctionParsingOutput "The method $methodName doesn't take $($arguments.Count) arguments."
+            Write-AifbFunctionParsingOutput "The method $memberName doesn't take $($arguments.Count) arguments."
             return
         }
     }
