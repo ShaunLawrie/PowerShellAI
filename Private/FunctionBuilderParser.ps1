@@ -307,6 +307,7 @@ function Test-AifbFunctionCommandletUsage {
         }
         
         # Check at least one parameter set is satisfied if all parameters to this commandlet have been specified by name
+        $availableParameterSets = @()
         if($script:CommandletsExemptFromNamedParameters -notcontains $commandletName -and $commandletName -like "*-*") {
             $parameterSetSatisfied = $false
             if($command.ParameterSets.Count -eq 0) {
@@ -314,19 +315,23 @@ function Test-AifbFunctionCommandletUsage {
             } else {
                 foreach($parameterSet in $command.ParameterSets) {
                     $mandatoryParameters = $parameterSet.Parameters | Where-Object { $_.IsMandatory }
-                    $mandatoryParametersUsed = ,($mandatoryParameters | Where-Object { $commandletParameterNames -contains $_.Name }).Name
+                    $availableParameterSets += "$($parameterSet.Name) ($($mandatoryParameters.Name -join ', '))"
+                    $mandatoryParametersUsed = [array]($mandatoryParameters | Where-Object { $commandletParameterNames -contains $_.Name }).Name
                     if($hasPipelineInput -and ($mandatoryParameters | Where-Object { $_.ValueFromPipeline })) {
                         $mandatoryParametersUsed += "Pipeline Input"
                     }
                     if($mandatoryParametersUsed.Count -ge $mandatoryParameters.Count) {
+                        Write-Verbose "Parameter set $($parameterSet.Name) was satisfied"
                         $parameterSetSatisfied = $true
                         break
+                    } else {
+                        Write-Verbose "Parameter set $($parameterSet.Name) wasn't satisfied, expected $($mandatoryParameters.Count) but found $($mandatoryParametersUsed.Count)"
                     }
                 }
             }
             if(!$parameterSetSatisfied) {
                 Write-AifbOverlay -Line $extent.StartLineNumber -Column $extent.StartColumnNumber -Text $extent.Text -ForegroundColor "Red"
-                Write-AifbFunctionParsingOutput "Parameter set cannot be resolved using the specified named parameters for $commandletName."
+                Write-AifbFunctionParsingOutput "Parameter set cannot be resolved using the specified named parameters for $commandletName, available parameter sets are $($availableParameterSets -join ', ')."
                 return
             }
         }
