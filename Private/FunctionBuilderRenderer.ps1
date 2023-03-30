@@ -137,12 +137,12 @@ function Write-AifbFunctionOutput {
         [Console]::SetCursorPosition(0, 0)
         if($script:InitialPrePrompt) {
             Write-Host -ForegroundColor Cyan -NoNewline "$($script:InitialPrePrompt): "
-            Write-Host ($script:InitialPrompt + (" " * ($consoleWidth - $script:InitialPrePrompt.Length + $script:InitialPrompt.Length + 2)))
+            Write-Host ($script:InitialPrompt + (" " * ($Host.UI.RawUI.WindowSize.Width - $script:InitialPrePrompt.Length - $script:InitialPrompt.Length - 2)))
         } else {
-            Write-Host ($script:InitialPrompt + (" " * ($consoleWidth - $script:InitialPrompt.Length)))
+            Write-Host ($script:InitialPrompt + (" " * ($Host.UI.RawUI.WindowSize.Width - $script:InitialPrompt.Length)))
         }
         
-        Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
+        Write-Host (" " * ($Host.UI.RawUI.WindowSize.Width))
 
         # Put the cursor position at the top left of the function
         [Console]::CursorVisible = $false
@@ -180,9 +180,6 @@ function Write-AifbFunctionOutput {
                     $currentLine += $line
                     $totalLinesRendered++
                 }
-                if(!$SyntaxHighlight) {
-                    Start-Sleep -Milliseconds 20
-                }
                 $script:FunctionLines += ,$currentLine
                 $functionLineNumber++
             }
@@ -195,7 +192,9 @@ function Write-AifbFunctionOutput {
 
         # Add a space between the function and anything below it
         $endOfFunctionPosition = $Host.UI.RawUI.CursorPosition
-        Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
+        1..($Host.UI.RawUI.WindowSize.Height - $endOfFunctionPosition.Y) | Foreach-Object {
+            Write-Host -NoNewline (" " * $Host.UI.RawUI.WindowSize.Width)
+        }
 
         # Write overtop of the function with some basic colors
         if($SyntaxHighlight) {
@@ -218,10 +217,6 @@ function Write-AifbFunctionOutput {
             }
         }
 
-        [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y)
-        3..($Host.UI.RawUI.WindowSize.Height - $script:FunctionTopLeft.Y - $totalLinesRendered) | Foreach-Object {
-            Write-Host (" " * $Host.UI.RawUI.WindowSize.Width)
-        }
         [Console]::SetCursorPosition($endOfFunctionPosition.X, $endOfFunctionPosition.Y + 1)
         $script:LogMessagesTopLeft = $Host.UI.RawUI.CursorPosition
         if(!$NoLogMessages) {
@@ -270,8 +265,6 @@ function Write-AifbOverlay {
         Write-Verbose "Overlay text for line $Line, column ${Column}: $FunctionText"
         return
     }
-
-    Start-Sleep -Milliseconds 5
 
     $writeHostParams = @{
         "NoNewline" = $true
@@ -412,10 +405,10 @@ function Write-AifbLogMessages {
         foreach($line in $lines) {
             if($lineNumber -eq 0) {
                 $message = $logPrefix + $line
-                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
+                Write-Host -NoNewline -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
             } else {
                 $message = (" " * $logPrefix.Length) + " $line"
-                Write-Host -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
+                Write-Host -NoNewline -ForegroundColor $script:LogMessageColors[$_.Level] ($message + (" " * ($consoleWidth - $message.Length)))
             }
             $lineNumber++
         }   

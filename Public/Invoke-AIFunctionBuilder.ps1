@@ -70,11 +70,12 @@ function Invoke-AIFunctionBuilder {
                 Import-Module $tempFilePsm1 -Global
                 $command = (Get-Command $function.Name)
                 $params = @{}
-                $command.ParameterSets.GetEnumerator()[0].Parameters | Where-Object { $_.Position -ge 0 } | Foreach-Object { $params[$_.Name] = Read-Host "$($_.Name) ($($_.ParameterType))" }
+                $command.ParameterSets.GetEnumerator()[0].Parameters | Where-Object { $_.Position -ge 0 } | Foreach-Object {
+                    $params[$_.Name] = Read-Host "$($_.Name) ($($_.ParameterType))"
+                }
                 $previousErrorActionPreference = $ErrorActionPreference
                 try {
-                    $ErrorActionPreference = "Stop"
-                    & $function.Name @params
+                    & $function.Name @params -ErrorAction "Stop"
                     Get-Module | Where-Object { $_.Path -eq $tempFilePsm1 } | Remove-Module
                 } catch {
                     Get-Module | Where-Object { $_.Path -eq $tempFilePsm1 } | Remove-Module
