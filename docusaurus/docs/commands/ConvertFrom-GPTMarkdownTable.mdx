@@ -1,0 +1,73 @@
+---
+id: ConvertFrom-GPTMarkdownTable
+title: ConvertFrom-GPTMarkdownTable
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Converts a markdown table to a PowerShell object.
+
+## SYNTAX
+
+```powershell
+ConvertFrom-GPTMarkdownTable [[-markdown] <Object>] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+{{ Fill in the Description }}
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+ConvertFrom-GPTMarkdownTable -Markdown @'
+| Name | Value |
+| ---- | ----- |
+| foo  | bar   |
+| baz  | qux   |
+'@
+```
+
+### EXAMPLE 2
+
+```powershell
+ai 'markdown table syntax' | ConvertFrom-GPTMarkdownTable
+```
+
+## PARAMETERS
+
+### -markdown
+
+The markdown table to convert.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

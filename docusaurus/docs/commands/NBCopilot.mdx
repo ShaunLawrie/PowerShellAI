@@ -1,0 +1,92 @@
+---
+id: NBCopilot
+title: NBCopilot
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Interactes with GPT and sends the result to a Polyglot Interactive Notebook cell
+
+## SYNTAX
+
+```powershell
+NBCopilot [[-prompt] <Object>] [[-cellType] <Object>] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+{{ Fill in the Description }}
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+NBCopilot 'Write a PowerShell core function, just code, no explanation, do not show how to use it, that will: show a date and time in timestamp form'
+```
+
+### EXAMPLE 2
+
+```powershell
+NBCopilot 'add comment based help to your code'
+```
+
+### EXAMPLE 3
+
+```powershell
+$prompt = 'Write c#, just the function, no explanation, do not show how to use it, that will: show a date and time in a regular timestamp form'
+```
+
+NBCopilot $prompt -cellType csharp
+
+## PARAMETERS
+
+### -prompt
+
+{{ Fill prompt Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -cellType
+
+{{ Fill cellType Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: Pwsh
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

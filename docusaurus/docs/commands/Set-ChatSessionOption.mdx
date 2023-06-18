@@ -1,0 +1,174 @@
+---
+id: Set-ChatSessionOption
+title: Set-ChatSessionOption
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Set a chat session option.
+
+## SYNTAX
+
+```powershell
+Set-ChatSessionOption [[-model] <Object>] [[-max_tokens] <Object>] [[-temperature] <Object>]
+ [[-top_p] <Object>] [[-frequency_penalty] <Object>] [[-presence_penalty] <Object>] [[-stop] <Object>]
+ [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+{{ Fill in the Description }}
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Set-ChatSessionOption -model 'gpt-4'
+```
+
+### EXAMPLE 2
+
+```powershell
+Set-ChatSessionOption -max_tokens 512
+```
+
+## PARAMETERS
+
+### -model
+
+The model to use for the chat session.
+Valid values are 'gpt-4' and 'gpt-3.5-turbo'.
+Default value is 'gpt-4'.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -max_tokens
+
+The maximum number of tokens to generate.
+Default value is 256.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: 256
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -temperature
+
+The temperature of the model.
+Default value is 0.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -top_p
+
+The top_p of the model.
+Default value is 1.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 1
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -frequency_penalty
+
+The frequency penalty of the model.
+Default value is 0.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -presence_penalty
+
+The presence penalty of the model.
+Default value is 0.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -stop
+
+The stop sequence of the model.
+Default value is $null.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 7
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

@@ -1,0 +1,79 @@
+---
+id: Enable-AIShortCutKey
+title: Enable-AIShortCutKey
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Enable a shortcut key for getting completions
+
+## SYNTAX
+
+```powershell
+Enable-AIShortCutKey [[-ShortcutKey] <String>]
+```
+
+## DESCRIPTION
+
+Enables a shortcut key for getting completions.
+
+The -ShortcutKey can be customized.
+
+If not in Visual Studio Code, the ShortcutKey will default to 'CTRL+G'
+In Visual Studio Code, the ShortcutKey will default to 'ALT+G'
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+# Enables the shortcut key.  Outside of VSCode, CTRL+G.  Inside of VSCode, ALT+G.
+Enable-AIShortCutKey
+```
+
+### EXAMPLE 2
+
+```powershell
+Enable-AIShortCutKey -ShortcutKey "CTRL+ALT+P"
+```
+
+## PARAMETERS
+
+### -ShortcutKey
+
+In Visual Studio Code, CTRL+G is "goto",
+so we'll use ALT+G by default.
+If we're not running in code, use CTRL+G by default
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: $(
+        # In Visual Studio Code, CTRL+G is "goto",
+        if ((Get-Process -id $pid).Parent.ProcessName -eq 'code') {
+            "ALT+G" # so we'll use ALT+G by default.
+        } else {
+            "CTRL+G" # If we're not running in code, use CTRL+G by default
+        }
+    )
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

@@ -1,0 +1,129 @@
+---
+id: ai
+title: ai
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+This is **Experimental** AI function
+
+## SYNTAX
+
+```powershell
+ai [[-inputPrompt] <Object>] [[-pipelineInput] <Object>] [[-temperature] <Decimal>] [[-max_tokens] <Object>]
+ [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+AI function that you can pipe all sorts of things into and get back a completion
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+ai "list of planets only names as json" |
+```
+
+### EXAMPLE 2
+
+```powershell
+ai "list of planets only names as json" | ai 'convert to  xml'
+```
+
+### EXAMPLE 3
+
+```powershell
+ai "list of planets only names as json" | ai 'convert to  xml' | ai 'convert to  powershell'
+```
+
+### EXAMPLE 4
+
+```powershell
+git status | ai "create a detailed git message"
+```
+
+## PARAMETERS
+
+### -inputPrompt
+
+{{ Fill inputPrompt Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -pipelineInput
+
+{{ Fill pipelineInput Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### -temperature
+
+{{ Fill temperature Description }}
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -max_tokens
+
+{{ Fill max_tokens Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 256
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

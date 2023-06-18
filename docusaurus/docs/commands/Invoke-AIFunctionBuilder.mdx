@@ -1,0 +1,170 @@
+---
+id: Invoke-AIFunctionBuilder
+title: Invoke-AIFunctionBuilder
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Create a PowerShell function with the help of ChatGPT
+
+## SYNTAX
+
+### Interactive (Default)
+
+```powershell
+Invoke-AIFunctionBuilder [-Prompt <String>] [-MaximumReinforcementIterations <Int32>] [-Model <String>]
+ [-InitialFunction <String>] [<CommonParameters>]
+```
+
+### NonInteractive
+
+```powershell
+Invoke-AIFunctionBuilder -Prompt <String> [-MaximumReinforcementIterations <Int32>] [-NonInteractive]
+ [-Model <String>] [-InitialFunction <String>] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Invoke-AIFunctionBuilder is a function that uses ChatGPT to generate an initial PowerShell function to achieve the goal defined
+in the prompt by the user but goes a few steps beyond the typical interaction with an LLM by auto-validating the result
+of the AI generated script using parsing techniques that feed common issues back to the model until it resolves them.
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Invoke-AIFunctionBuilder
+# The function builder renders the UI and asks the user to enter a prompt to generate a function
+```
+
+### EXAMPLE 2
+
+```powershell
+Invoke-AIFunctionBuilder -Prompt "Write a powershell function that will show a date and time in timestamp form" -NonInteractive
+function Get-Timestamp {
+    return (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffffZ")
+}
+```
+
+### EXAMPLE 3
+
+```powershell
+$function = 'function Write-Hello { Write-Output "hello world" }'
+PS>Invoke-AIFunctionBuilder -InitialFunction $function -Prompt "write a powershell function that says hello"
+# The function builder renders the UI and validates the function provided meets the goal of the prompt
+```
+
+## PARAMETERS
+
+### -Prompt
+
+A prompt in the format "Write a powershell function that will sing me happy birthday"
+
+```yaml
+Type: String
+Parameter Sets: Interactive
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+```yaml
+Type: String
+Parameter Sets: NonInteractive
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### -MaximumReinforcementIterations
+
+The maximum loop iterations to attempt to generate the function within
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: 15
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NonInteractive
+
+Return the code result without showing any interactions
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: NonInteractive
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Model
+
+The model to use
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: Gpt-3.5-turbo
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -InitialFunction
+
+A seed function to use as the function builder starting point, this can allow you to iterate on an existing idea
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+Author: Shaun Lawrie / @shaun_lawrie
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

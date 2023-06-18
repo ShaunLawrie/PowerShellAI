@@ -1,0 +1,161 @@
+---
+id: copilot
+title: copilot
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Use GPT to help you remember PowerShell commands and other command line tools
+
+## SYNTAX
+
+```powershell
+copilot [-inputPrompt] <Object> [[-SystemPrompt] <Object>] [[-temperature] <Decimal>] [[-max_tokens] <Object>]
+ [-Raw] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Makes the request to GPT, parses the response and displays it in a box and then prompts the user to run the code or not
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+# via https://twitter.com/ClemMesserli/status/1616312238209376260?s=20&t=KknO2iPk3yrQ7x42ZayS7g
+```
+
+copilot "using PowerShell regex, just code.
+split user from domain of email address with match:  demo.user@google.com"
+
+### EXAMPLE 2
+
+```powershell
+copilot 'how to get ImportExcel'
+```
+
+### EXAMPLE 3
+
+```powershell
+copilot 'processes running with more than 700 handles'
+```
+
+### EXAMPLE 4
+
+```powershell
+copilot 'processes running with more than 700 handles select first 5, company and name, as json'
+```
+
+### EXAMPLE 5
+
+```powershell
+copilot 'for each file in the current dir list the name and length'
+```
+
+### EXAMPLE 6
+
+```powershell
+copilot 'Find all enabled users that have a samaccountname similar to Mazi; List SAMAccountName and DisplayName'
+```
+
+## PARAMETERS
+
+### -inputPrompt
+
+{{ Fill inputPrompt Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SystemPrompt
+
+{{ Fill SystemPrompt Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: Using powershell, just code:
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -temperature
+
+{{ Fill temperature Description }}
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -max_tokens
+
+The maximum number of tokens to generate.
+default 256
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 256
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Raw
+
+Don't show prompt for choice
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

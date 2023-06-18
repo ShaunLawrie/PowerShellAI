@@ -1,0 +1,116 @@
+---
+id: Set-AzureOpenAI
+title: Set-AzureOpenAI
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Sets the Azure OpenAI API endpoint, deployment name, API version, and API key.
+
+## SYNTAX
+
+```powershell
+Set-AzureOpenAI [-Endpoint] <Object> [-DeploymentName] <Object> [-ApiVersion] <Object> [-ApiKey] <Object>
+ [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Sets up Azure OpenAI as the chat API provider.
+Use `Set-ChatAPIProvider -Provider OpenAI` to point to the public OpenAI
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Set-AzureOpenAI `
+    -Endpoint https://anEndpoint.openai.azure.com/ `
+    -DeploymentName aName `
+    -ApiVersion 2023-03-15-preview `
+    -ApiKey aKey
+```
+
+## PARAMETERS
+
+### -Endpoint
+
+{{ Fill Endpoint Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DeploymentName
+
+{{ Fill DeploymentName Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 2
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ApiVersion
+
+{{ Fill ApiVersion Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 3
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ApiKey
+
+{{ Fill ApiKey Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

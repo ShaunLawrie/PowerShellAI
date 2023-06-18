@@ -1,0 +1,203 @@
+---
+id: Get-GPT3Completion
+title: Get-GPT3Completion
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Get a completion from the OpenAI GPT-3 API
+
+## SYNTAX
+
+```powershell
+Get-GPT3Completion [-prompt] <Object> [[-model] <Object>] [[-temperature] <Decimal>] [[-max_tokens] <Int32>]
+ [[-top_p] <Decimal>] [[-frequency_penalty] <Decimal>] [[-presence_penalty] <Decimal>] [[-stop] <Object>]
+ [-Raw] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Given a prompt, the model will return one or more predicted completions, and can also return the probabilities of alternative tokens at each position
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Get-GPT3Completion -prompt "What is 2%2? - please explain"
+```
+
+## PARAMETERS
+
+### -prompt
+
+The prompt to generate completions for
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -model
+
+ID of the model to use.
+Defaults to 'text-davinci-003'
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: Text-davinci-003
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -temperature
+
+The temperature used to control the model's likelihood to take risky actions.
+Higher values means the model will take more risks.
+Try 0.9 for more creative applications, and 0 (argmax sampling) for ones with a well-defined answer.
+Defaults to 0
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -max_tokens
+
+The maximum number of tokens to generate.
+By default, this will be 64 if the prompt is not provided, and 1 if a prompt is provided.
+The maximum is 2048
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 256
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -top_p
+
+An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass.
+So 0.1 means only the tokens comprising the top 10% probability mass are considered.
+Defaults to 1
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: 1
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -frequency_penalty
+
+A value between 0 and 1 that penalizes new tokens based on whether they appear in the text so far.
+Defaults to 0
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -presence_penalty
+
+A value between 0 and 1 that penalizes new tokens based on whether they appear in the text so far.
+Defaults to 0
+
+```yaml
+Type: Decimal
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 7
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -stop
+
+A list of tokens that will cause the API to stop generating further tokens.
+By default, the API will stop generating when it hits one of the following tokens: ., !, or ?.
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 8
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Raw
+
+{{ Fill Raw Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

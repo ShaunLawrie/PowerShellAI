@@ -1,0 +1,83 @@
+---
+id: Get-OpenAIModeration
+title: Get-OpenAIModeration
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Checks if prompt contains wording that violates OpenAI moderation rules
+
+## SYNTAX
+
+```powershell
+Get-OpenAIModeration [-InputText] <Object> [-Raw] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Checks prompt text content against latest moderation rules to determine if
+any OpenAI moderation rules would be violated.
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Get-OpenAIModeration -InputText "I want to kill them."
+```
+
+## PARAMETERS
+
+### -InputText
+
+Prompt text to evaluate
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Raw
+
+{{ Fill Raw Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+This function requires the 'OpenAIKey' environment variable to be defined before being invoked
+Reference: https://platform.openai.com/docs/guides/moderation/quickstart
+Reference: https://platform.openai.com/docs/api-reference/moderations/create
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.

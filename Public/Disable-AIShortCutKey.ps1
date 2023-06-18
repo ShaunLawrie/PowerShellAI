@@ -5,9 +5,7 @@ function Disable-AIShortCutKey {
         .DESCRIPTION
             Disable the shortcut key for completing suggestions.
         .EXAMPLE
-            Disable-AIShortCutKey            
-        .LINK
-            Enable-AIShortCutKey
+            Disable-AIShortCutKey           
     #>
 
     $chordsToRemove = Get-PSReadLineKeyHandler |

@@ -1,0 +1,99 @@
+---
+id: Get-OpenAIUsage
+title: Get-OpenAIUsage
+hide_title: false
+hide_table_of_contents: false
+---
+
+## SYNOPSIS
+
+Get a summary of OpenAI API usage
+
+## SYNTAX
+
+```powershell
+Get-OpenAIUsage [[-StartDate] <DateTime>] [[-EndDate] <DateTime>] [-OnlyLineItems] [<CommonParameters>]
+```
+
+## DESCRIPTION
+
+Returns a summary of OpenAI API usage for your organization.
+All dates and times are UTC-based, and data may be delayed up to 5 minutes.
+
+## EXAMPLES
+
+### EXAMPLE 1
+
+```powershell
+Get-OpenAIUsage -StartDate '2023-03-01' -EndDate '2023-03-31'
+```
+
+## PARAMETERS
+
+### -StartDate
+
+The Start Date of the usage period to return in YYYY-MM-DD format
+
+```yaml
+Type: DateTime
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: (Get-Date).AddDays(-1)
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -EndDate
+
+The End Date of the usage period to return in YYYY-MM-DD format
+
+```yaml
+Type: DateTime
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: (Get-Date)
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OnlyLineItems
+
+{{ Fill OnlyLineItems Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
+
+This function requires the 'OpenAIKey' environment variable to be defined before being invoked
+Reference: https://platform.openai.com/docs/models/overview
+Reference: https://platform.openai.com/docs/api-reference/models
+
+## RELATED LINKS
+
+> **NOTE**  
+> This documentation is generated from the PowerShell comment based help for the functions in the module.  
+> To update the documentation please open a PR to update the comments on this function.
