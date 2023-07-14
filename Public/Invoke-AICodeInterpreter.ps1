@@ -66,7 +66,13 @@ function Invoke-AICodeInterpreter {
     )
 
     Set-ChatSessionOption -model "gpt-4" -max_tokens 1024
-    New-Chat -Content "You are an expert powershell developer and you test code. You are capable of evaluating math when it's required to meet function requirements. When given a list of requirements for a function you will write pester tests without mocks. Write the tests before attempting to solve the requirements." | Out-Null
+    New-Chat -Content @"
+You are an expert powershell with the following skills:
+ - You develop and you test code
+ - You are capable of evaluating math when it's required to meet function requirements
+ - When given a list of requirements for a function you will write pester tests without mocks
+ - You always write tests before attempting to solve the requirements.
+"@ | Out-Null
 
     $path = Initialize-AICodeInterpreter -Start $Start
 
@@ -81,7 +87,7 @@ function Invoke-AICodeInterpreter {
         $test = $response | ConvertTo-AifbTest
         $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
 
-        Write-SpectrePanel -Title " :robot: PowerShellAI " -Data "`n[grey69]$([Spectre.Console.Markup]::Escape($text))[/]" -Expand
+        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
         
         if($test) {
             Write-Host ""
@@ -97,7 +103,7 @@ function Invoke-AICodeInterpreter {
         $function = $response | ConvertTo-AifbFunction -ErrorAction "SilentlyContinue"
         $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
         
-        Write-SpectrePanel -Title " :robot: PowerShellAI " -Data "`n[grey69]$([Spectre.Console.Markup]::Escape($text))[/]" -Expand
+        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
 
         if($function) {
             Write-Host ""
@@ -116,8 +122,15 @@ function Invoke-AICodeInterpreter {
         $results = $results -replace '\s+time=".+?"', '' -replace 'date=".+?"', 'date="2023-01-01"'
         Write-Host ""
 
+        $attempts = 0
+        $maxAttempts = 4
         $semanticallyCorrect = $false
         while($semanticallyCorrect -ne $true) {
+            $attempts++
+            if($attempts -gt $maxAttempts) {
+                Write-Error "Reached maximum attempts $attempts"
+                exit
+            }
             while ($testResult -ne 0) {
                 $function = $null
                 $text = "Not set"
@@ -137,7 +150,7 @@ function Invoke-AICodeInterpreter {
                     $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
                 }
 
-                Write-SpectrePanel -Title " :robot: PowerShellAI " -Data "`n[grey69]$([Spectre.Console.Markup]::Escape($text))[/]" -Expand
+                Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
 
                 if($function) {
                     Write-Host ""
@@ -162,7 +175,7 @@ function Invoke-AICodeInterpreter {
             Write-Verbose $question
             $response = (Get-GPT4Completion $question).Trim()
             $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
-            Write-SpectrePanel -Title " :robot: PowerShellAI " -Data "`n[grey69]$([Spectre.Console.Markup]::Escape($text))[/]" -Expand
+            Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
             if($response -like "*yes*") {
                 $semanticallyCorrect = $true
                 $testResult = 0
