@@ -159,6 +159,7 @@ function ConvertTo-AifbFunction {
                 Body = "function Get-Foo { Write-Host 'bar' }"
             }
     #>
+    [CmdletBinding()]
     param (
         # Some text that contains a function name and body to extract
         [Parameter(ValueFromPipeline = $true)]

@@ -31,6 +31,8 @@ function Set-OpenAIAPIOptions {
     if($CacheResponses) {
         if(Test-Path $script:CacheStoragePath) {
             $script:CachedResponses = Get-Content -Raw -Path $script:CacheStoragePath | ConvertFrom-Json -Depth 10 -AsHashtable
+        } else {
+            $script:CachedResponses = @{}
         }
     }
 }
@@ -49,14 +51,28 @@ function Get-OpenAICachedResponse {
     # Quick in-memory cache
     if($script:CachedResponses.ContainsKey($hashKey)) {
         $response = $script:CachedResponses[$hashKey]
+        if($script:CacheResponseDelayMilliseconds -gt 0) {
+            $progressActivity = "Thinking (cached)..."
+            $start = Get-Date
+            $timeout = (Get-Date).AddMilliseconds($script:CacheResponseDelayMilliseconds)
+            while((Get-Date) -lt $timeout) {
+                $percent = ((Get-Date) - $start).TotalMilliseconds / $script:CacheResponseDelayMilliseconds * 100
+                
+                # Slow the progress towards the end of the progress bar because the api is a bit all over the show for response times, this makes sure the bar doesn't fill up linearly
+                $logPercent = [int][math]::Min([math]::Max(1, $percent * [math]::Log(1.5)), 100)
+                $status = "$logPercent% Completed"
+                if($logPercent -eq 100) {
+                    $status = "API is taking longer than expected"
+                }
+                Write-Progress -Id 1 -Activity $progressActivity -Status $status -PercentComplete $logPercent
+                Start-Sleep -Milliseconds 10
+            }
+            Write-Progress -Id 1 -Activity $progressActivity -Completed
+        }
     } else {
         $response = Invoke-RestMethodWithProgress -Params $params -NoProgress:$NoProgress
         $script:CachedResponses[$hashKey] = $response
         Export-CacheStorage
-    }
-
-    if($script:CacheResponseDelayMilliseconds -gt 0) {
-        Start-Sleep -Milliseconds $script:CacheResponseDelayMilliseconds
     }
 
     return $response
