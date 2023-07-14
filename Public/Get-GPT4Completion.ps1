@@ -454,18 +454,20 @@ function Get-GPT4Completion {
     param(
         [Parameter(Mandatory)]
         $Content,
-        [decimal]$temperature
+        [decimal]$temperature,
+        [switch]$NoCache
     )
 
     New-ChatUserMessage -Content $Content
 
-    Get-GPT4Response -Temperature $temperature
+    Get-GPT4Response -Temperature $temperature -NoCache:$NoCache
 }
 
 function Get-GPT4Response {
     [CmdletBinding()]
     param(
-        [decimal]$Temperature
+        [decimal]$Temperature,
+        [switch] $NoCache
     )
 
     $payload = Get-ChatPayload -AsJson
@@ -482,7 +484,7 @@ function Get-GPT4Response {
         (Get-ChatSessionOptions)['temperature'] = $Temperature
     }
 
-    $result = Invoke-OpenAIAPI -Uri $uri -Method 'Post' -Body $body 
+    $result = Invoke-OpenAIAPI -Uri $uri -Method 'Post' -Body $body -NoCache:$NoCache
 
     if ($result.choices) {
         $response = $result.choices[0].message.content

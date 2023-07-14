@@ -87,7 +87,7 @@ You are an expert powershell with the following skills:
         $test = $response | ConvertTo-AifbTest
         $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
 
-        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
+        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Color "IndianRed1_1" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
         
         if($test) {
             Write-Host ""
@@ -103,7 +103,7 @@ You are an expert powershell with the following skills:
         $function = $response | ConvertTo-AifbFunction -ErrorAction "SilentlyContinue"
         $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
         
-        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
+        Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Color "IndianRed1_1" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
 
         if($function) {
             Write-Host ""
@@ -138,7 +138,7 @@ You are an expert powershell with the following skills:
                     $question = "The code doesn't meet all requirements, the code needs fixing:"
                     Write-Verbose "Failing on semantics"
                     Write-Verbose $question
-                    $response = (Get-GPT4Completion $question).Trim()
+                    $response = (Get-GPT4Completion $question -NoCache).Trim()
                     $function = $response | ConvertTo-AifbFunction -ErrorAction "SilentlyContinue"
                     $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
                 } else {
@@ -150,7 +150,7 @@ You are an expert powershell with the following skills:
                     $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
                 }
 
-                Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
+                Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Color "IndianRed1_1" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
 
                 if($function) {
                     Write-Host ""
@@ -175,7 +175,7 @@ You are an expert powershell with the following skills:
             Write-Verbose $question
             $response = (Get-GPT4Completion $question).Trim()
             $text = $response -replace '(?s)```.+?```', '' -replace ':', '.' -replace '[\n]{2}', "`n"
-            Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
+            Write-SpectrePanel -Title "[white] :robot: PowerShellAI [/]" -Color "IndianRed1_1" -Data "$([Spectre.Console.Markup]::Escape($text))" -Expand
             if($response -like "*yes*") {
                 $semanticallyCorrect = $true
                 $testResult = 0

@@ -39,7 +39,8 @@ function Set-OpenAIAPIOptions {
 
 function Get-OpenAICachedResponse {
     param (
-        [hashtable] $Params
+        [hashtable] $Params,
+        [switch] $NoCache
     )
     # Should probably use sha256 because the params contain the api key
     $sha256 = [System.Security.Cryptography.SHA256Managed]::new()
@@ -49,7 +50,7 @@ function Get-OpenAICachedResponse {
     $hashKey = [Convert]::ToBase64String($hashBytes)
     
     # Quick in-memory cache
-    if($script:CachedResponses.ContainsKey($hashKey)) {
+    if($script:CachedResponses.ContainsKey($hashKey) -and $NoCache -ne $true) {
         $response = $script:CachedResponses[$hashKey]
         if($script:CacheResponseDelayMilliseconds -gt 0) {
             $progressActivity = "Thinking (cached)..."
@@ -112,7 +113,8 @@ function Invoke-OpenAIAPI {
         [ValidateSet('Default', 'Delete', 'Get', 'Head', 'Merge', 'Options', 'Patch', 'Post', 'Put', 'Trace')]
         $Method = 'Get',
         $Body,
-        [switch] $NoProgress
+        [switch] $NoProgress,
+        [switch] $NoCache
     )
 
     $params = @{
@@ -159,7 +161,7 @@ function Invoke-OpenAIAPI {
     Write-Information "Thinking ..."
     
     if($script:CacheResponses) {
-        Get-OpenAICachedResponse -Params $params -NoProgress:$NoProgress
+        Get-OpenAICachedResponse -Params $params -NoProgress:$NoProgress -NoCache:$NoCache
     } else {
         Invoke-RestMethodWithProgress -Params $params -NoProgress:$NoProgress
     }
